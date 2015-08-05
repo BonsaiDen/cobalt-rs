@@ -1,0 +1,13 @@
+[package]
+name = "cobalt"
+version = "0.1.0"
+authors = ["Ivo Wetzel <ivo.wetzel@googlemail.com>"]
+documentation = "https://bonsaiden.github.io/cobalt-rs/"
+repository = "https://github.com/BonsaiDen/cobalt-rs.git"
+readme = "README.md"
+keywords = ["udp", "protocol", "connection", "network"]
+license="MIT"
+
+[dependencies]
+clock_ticks = "*"
+rand = "*"
