@@ -13,6 +13,22 @@ article series by Glenn Fiedler.
 - Move out logic for congestion detection / avoidance into a trait so there can be different implementation.
 
 
+## Usage
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+cobalt = "0.1.0"
+```
+
+and this to your crate root:
+
+```rust
+extern crate cobalt;
+```
+
+
 ## Licensed under MIT
 
 Copyright (c) 2015 Ivo Wetzel.
