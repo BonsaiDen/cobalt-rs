@@ -5,7 +5,7 @@ A implementation of a basic, reliable UDP based networking protocol in [rust](ht
 Mostly designed after the [UDP vs. TCP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) 
 article series by Glenn Fiedler.
 
-- [Documentation](https://bonsaiden.github.io/cobalt-rs/)
+- [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt)
 
 
 ## TODO
