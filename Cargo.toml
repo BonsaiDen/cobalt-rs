@@ -2,6 +2,7 @@
 name = "cobalt"
 version = "0.1.0"
 authors = ["Ivo Wetzel <ivo.wetzel@googlemail.com>"]
+description="low level, reliable UDP based networking"
 documentation = "https://bonsaiden.github.io/cobalt-rs/"
 repository = "https://github.com/BonsaiDen/cobalt-rs.git"
 readme = "README.md"
