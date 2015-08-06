@@ -17,7 +17,7 @@ pub const MAX_SEQ_NUMBER: u32 = 256;
 pub const HEADER_BYTES: usize = 14;
 
 /// A value indicating the current state of a connection.
-#[derive(PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum ConnectionState {
 
     /// The connection has been opened but has yet to receive the first
@@ -66,7 +66,7 @@ struct SentPacketAck {
 /// > \* The id is a `32` bit random integer; thus, in theory, there is a
 /// > potential for two clients using the same id, in which case both will have
 /// > their connections dropped very shortly because of data mismatch.
-#[derive(PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct ConnectionID(pub u32);
 
 /// Implementation of reliable UDP based messaging protocol.
@@ -132,6 +132,17 @@ pub struct Connection {
 impl Connection {
 
     /// Creates a new Virtual Connection over the given `SocketAddr`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cobalt::shared::{Connection, ConnectionState, Config};
+    ///
+    /// let conn = Connection::new(Config::default());
+    ///
+    /// assert_eq!(conn.get_state(), ConnectionState::Connecting);
+    /// assert_eq!(conn.is_open(), true);
+    /// ```
     pub fn new(config: Config) -> Connection {
         Connection {
             config: config,
@@ -155,7 +166,30 @@ impl Connection {
         }
     }
 
-    /// Extracts a connection id from a valid packet header.
+    /// Extracts a `ConnectionID` from packet with a valid protocol header.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cobalt::shared::{Connection, ConnectionID, Config};
+    ///
+    /// let config = Config {
+    ///     protocol_header: [11, 22, 33, 44],
+    ///     ..Config::default()
+    /// };
+    ///
+    /// let packet = [
+    ///     11, 22, 33, 44,
+    ///      1,  2,  3,  4,
+    ///      0,
+    ///      0,
+    ///      0,  0, 0,  0
+    /// ];
+    ///
+    /// let conn_id = Connection::id_from_packet(&config, &packet);
+    ///
+    /// assert_eq!(conn_id, Some(ConnectionID(16909060)));
+    /// ```
     pub fn id_from_packet(config: &Config, packet: &[u8]) -> Option<ConnectionID> {
         if &packet[0..4] == &config.protocol_header {
             Some(ConnectionID(
@@ -203,7 +237,8 @@ impl Connection {
     /// over the total number of packets that have been send across the
     /// connection.
     pub fn get_packet_loss(&self) -> f32 {
-        100.0 / self.sent_packets as f32 * self.lost_packets as f32
+        100.0 / cmp::max(self.sent_packets, 1) as f32
+                           * self.lost_packets as f32
     }
 
     /// Appends to the data that is going to be send with the next outgoing
