@@ -17,10 +17,10 @@ pub struct UdpSocket {
     close_sender: Sender<()>
 }
 
-impl Socket for UdpSocket {
+impl UdpSocket {
 
     /// Tries to create a new UDP socket by binding to the specified address.
-    fn new<T: net::ToSocketAddrs>(
+    pub fn new<T: net::ToSocketAddrs>(
         address: T, max_packet_size: usize
     ) -> Result<Self, Error> {
 
@@ -79,28 +79,13 @@ impl Socket for UdpSocket {
     }
 
     /// Returns the socket address of the underlying UdpSocket.
-    fn local_addr(&self) -> Result<net::SocketAddr, Error> {
+    pub fn local_addr(&self) -> Result<net::SocketAddr, Error> {
         self.socket.local_addr()
     }
 
-    /// Returns the channel receiver for incoming UDP packets.
-    ///
-    /// The `SocketReader` will be moved out; thus, the method will return
-    /// `None` on all subsequent calls.
-    fn reader(&mut self) -> Option<SocketReader> {
-        self.udp_receiver.take()
-    }
-
-    /// Sends `data` to the specified remote address.
-    fn send<T: net::ToSocketAddrs>(
-        &self, addr: T, data: &[u8])
-    -> Result<usize, Error> {
-
-        self.socket.send_to(data, addr)
-    }
 
     /// Shuts down the socket by stopping its internal reader thread.
-    fn shutdown(&mut self) {
+    pub fn shutdown(&mut self) {
 
         // Only shutdown if we still got a reader thread
         if let Some(reader_thread) = self.reader_thread.take() {
@@ -119,6 +104,26 @@ impl Socket for UdpSocket {
 
         }
 
+    }
+
+}
+
+impl Socket for UdpSocket {
+
+    /// Returns the channel receiver for incoming UDP packets.
+    ///
+    /// The `SocketReader` will be moved out; thus, the method will return
+    /// `None` on all subsequent calls.
+    fn reader(&mut self) -> Option<SocketReader> {
+        self.udp_receiver.take()
+    }
+
+    /// Sends `data` to the specified remote address.
+    fn send<T: net::ToSocketAddrs>(
+        &self, addr: T, data: &[u8])
+    -> Result<usize, Error> {
+
+        self.socket.send_to(data, addr)
     }
 
 }
