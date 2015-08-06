@@ -2,7 +2,7 @@ use std::thread;
 use std::io::Error;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::HashMap;
-use shared::{Config, Connection, ConnectionID, Handler, Socket};
+use shared::{Config, Connection, ConnectionID, Handler, UdpSocket};
 
 /// A multi-client server that uses a reliable UDP connection for
 /// unreliable packet transmission.
@@ -38,7 +38,7 @@ impl Server {
         let tick_delay = 1000 / self.config.send_rate;
 
         // Create the UDP socket
-        let mut socket = try!(Socket::new(
+        let mut socket = try!(UdpSocket::new(
             address,
             self.config.packet_max_size
         ));

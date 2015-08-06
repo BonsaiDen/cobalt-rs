@@ -1,10 +1,8 @@
 use std::thread;
 use std::io::Error;
-use std::net::{UdpSocket, SocketAddr, ToSocketAddrs};
-use std::sync::mpsc::{channel, Sender, Receiver};
-
-/// A channel receiver for UDP packets.
-pub type SocketReader = Receiver<(SocketAddr, Vec<u8>)>;
+use std::net;
+use std::sync::mpsc::{channel, Sender};
+use shared::traits::{Socket, SocketReader};
 
 /// A Non-blocking abstraction over a UDP socket.
 ///
@@ -12,28 +10,28 @@ pub type SocketReader = Receiver<(SocketAddr, Vec<u8>)>;
 ///
 /// The implementation guarantees that the internal thread exits cleanly in
 /// case of either the sockets shutdown or it getting dropped.
-pub struct Socket {
-    socket: UdpSocket,
+pub struct UdpSocket {
+    socket: net::UdpSocket,
     reader_thread: Option<thread::JoinHandle<()>>,
     udp_receiver: Option<SocketReader>,
     close_sender: Sender<()>
 }
 
-impl Socket {
+impl UdpSocket {
 
     /// Tries to create a new UDP socket by binding to the specified address.
-    pub fn new<T: ToSocketAddrs>(
+    pub fn new<T: net::ToSocketAddrs>(
         address: T, max_packet_size: usize
-    ) -> Result<Socket, Error> {
+    ) -> Result<UdpSocket, Error> {
 
         // Create the send socket
-        let sender = try!(UdpSocket::bind(address));
+        let sender = try!(net::UdpSocket::bind(address));
 
         // Clone the socket handle for use inside the reader thread
         let reader = try!(sender.try_clone());
 
         // Create communication channels
-        let (s_udp, r_udp) = channel::<(SocketAddr, Vec<u8>)>();
+        let (s_udp, r_udp) = channel::<(net::SocketAddr, Vec<u8>)>();
         let (s_close, r_close) = channel::<()>();
 
         // Create Reader Thread
@@ -71,7 +69,7 @@ impl Socket {
         });
 
         // Return the combined structure
-        Ok(Socket {
+        Ok(UdpSocket {
             socket: sender,
             reader_thread: Some(reader_thread),
             udp_receiver: Some(r_udp),
@@ -81,7 +79,7 @@ impl Socket {
     }
 
     /// Returns the socket address of the underlying UdpSocket.
-    pub fn local_addr(&self) -> Result<SocketAddr, Error> {
+    pub fn local_addr(&self) -> Result<net::SocketAddr, Error> {
         self.socket.local_addr()
     }
 
@@ -94,10 +92,9 @@ impl Socket {
     }
 
     /// Sends `data` to the specified remote address.
-    pub fn send<T: ToSocketAddrs>(&self,
-                                  addr: T,
-                                  data: &[u8])
-                                  -> Result<usize, Error> {
+    pub fn send<T: net::ToSocketAddrs>(
+        &self, addr: T, data: &[u8])
+    -> Result<usize, Error> {
 
         self.socket.send_to(data, addr)
     }
@@ -113,7 +110,7 @@ impl Socket {
 
             // Then send a empty packet to the reader socket
             // so its recv_from() unblocks
-            let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+            let socket = net::UdpSocket::bind("0.0.0.0:0").unwrap();
             let empty_packet: [u8; 0] = [0; 0];
             socket.send_to(&empty_packet, self.local_addr().unwrap()).unwrap();
 
@@ -126,7 +123,7 @@ impl Socket {
 
 }
 
-impl Drop for Socket {
+impl Drop for UdpSocket {
     fn drop(&mut self) {
         // Make sure to exit the internal thread cleanly
         self.shutdown();

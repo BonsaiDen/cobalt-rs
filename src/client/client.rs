@@ -1,7 +1,7 @@
 use std::thread;
 use std::io::Error;
 use std::net::ToSocketAddrs;
-use shared::{Config, Connection, Handler, Socket};
+use shared::{Config, Connection, Handler, UdpSocket};
 
 /// A server client that uses a reliable UDP connection for unreliable packet
 /// transmission.
@@ -41,7 +41,7 @@ impl Client {
         let remote = try!(address.to_socket_addrs()).next().unwrap();
 
         // Create the UDP socket
-        let mut socket = try!(Socket::new(
+        let mut socket = try!(UdpSocket::new(
             "127.0.0.1:0",
             self.config.packet_max_size
         ));
