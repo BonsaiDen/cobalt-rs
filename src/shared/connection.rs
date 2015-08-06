@@ -4,8 +4,8 @@ extern crate clock_ticks;
 use std::cmp;
 use std::net::SocketAddr;
 use std::collections::VecDeque;
-use shared::{Config, Handler};
-use shared::traits::Socket;
+use shared::Config;
+use shared::traits::{Socket, Handler};
 
 /// Maximum number of acknowledgement bits available in the packet header.
 pub const MAX_ACK_BITS: u32 = 32;

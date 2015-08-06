@@ -4,7 +4,8 @@ use std::env;
 use std::collections::HashMap;
 use cobalt::client::Client;
 use cobalt::server::Server;
-use cobalt::shared::{Config, Connection, ConnectionID, Handler};
+use cobalt::shared::{Config, Connection, ConnectionID};
+use cobalt::shared::traits::Handler;
 
 struct ServerHandler;
 impl Handler<Server> for ServerHandler {

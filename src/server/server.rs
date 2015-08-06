@@ -2,8 +2,8 @@ use std::thread;
 use std::io::Error;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::HashMap;
-use shared::{Config, Connection, ConnectionID, Handler, UdpSocket};
-use shared::traits::Socket;
+use shared::{Config, Connection, ConnectionID, UdpSocket};
+use shared::traits::{Socket, Handler};
 
 /// A multi-client server that uses a reliable UDP connection for
 /// unreliable packet transmission.
