@@ -47,9 +47,9 @@ pub struct Config {
 
 }
 
-impl Config {
+impl Default for Config {
 
-    pub fn new() -> Config {
+    fn default() -> Config {
         Config {
             send_rate: 30,
             congestion_divider: 3,

@@ -97,13 +97,13 @@ fn main() {
     for arg in env::args().skip(1) {
         match &arg[..]  {
             "client" => {
-                let config = Config::new();
+                let config = Config::default();
                 let mut handler = ClientHandler;
                 let mut client = Client::new(config);
                 client.connect(&mut handler, "127.0.0.1:7156");
             },
             "server" => {
-                let config = Config::new();
+                let config = Config::default();
                 let mut handler = ServerHandler;
                 let mut server = Server::new(config);
                 server.bind(&mut handler, "127.0.0.1:7156");
