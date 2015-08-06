@@ -2,6 +2,7 @@ use std::thread;
 use std::io::Error;
 use std::net::ToSocketAddrs;
 use shared::{Config, Connection, Handler, UdpSocket};
+use shared::traits::Socket;
 
 /// A server client that uses a reliable UDP connection for unreliable packet
 /// transmission.

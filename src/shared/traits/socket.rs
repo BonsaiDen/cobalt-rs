@@ -11,7 +11,7 @@ pub trait Socket {
     /// Tries to create a new UDP socket by binding to the specified address.
     fn new<T: net::ToSocketAddrs>(address: T,
                                   max_packet_size: usize)
-    -> Result<Socket, Error>;
+    -> Result<Self, Error>;
 
     /// Returns the socket address of the underlying UdpSocket.
     fn local_addr(&self) -> Result<net::SocketAddr, Error>;

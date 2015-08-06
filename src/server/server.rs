@@ -3,6 +3,7 @@ use std::io::Error;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::HashMap;
 use shared::{Config, Connection, ConnectionID, Handler, UdpSocket};
+use shared::traits::Socket;
 
 /// A multi-client server that uses a reliable UDP connection for
 /// unreliable packet transmission.
@@ -119,7 +120,8 @@ impl Server {
 
             // Remove any dropped connections and their address mappings
             for id in dropped.iter() {
-                connections.remove(id).unwrap();
+                let mut conn = connections.remove(id).unwrap();
+                conn.reset();
                 addresses.remove(id).unwrap();
             }
 

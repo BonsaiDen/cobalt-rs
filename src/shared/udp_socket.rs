@@ -17,12 +17,12 @@ pub struct UdpSocket {
     close_sender: Sender<()>
 }
 
-impl UdpSocket {
+impl Socket for UdpSocket {
 
     /// Tries to create a new UDP socket by binding to the specified address.
-    pub fn new<T: net::ToSocketAddrs>(
+    fn new<T: net::ToSocketAddrs>(
         address: T, max_packet_size: usize
-    ) -> Result<UdpSocket, Error> {
+    ) -> Result<Self, Error> {
 
         // Create the send socket
         let sender = try!(net::UdpSocket::bind(address));
@@ -79,7 +79,7 @@ impl UdpSocket {
     }
 
     /// Returns the socket address of the underlying UdpSocket.
-    pub fn local_addr(&self) -> Result<net::SocketAddr, Error> {
+    fn local_addr(&self) -> Result<net::SocketAddr, Error> {
         self.socket.local_addr()
     }
 
@@ -87,12 +87,12 @@ impl UdpSocket {
     ///
     /// The `SocketReader` will be moved out; thus, the method will return
     /// `None` on all subsequent calls.
-    pub fn reader(&mut self) -> Option<SocketReader> {
+    fn reader(&mut self) -> Option<SocketReader> {
         self.udp_receiver.take()
     }
 
     /// Sends `data` to the specified remote address.
-    pub fn send<T: net::ToSocketAddrs>(
+    fn send<T: net::ToSocketAddrs>(
         &self, addr: T, data: &[u8])
     -> Result<usize, Error> {
 
@@ -100,7 +100,7 @@ impl UdpSocket {
     }
 
     /// Shuts down the socket by stopping its internal reader thread.
-    pub fn shutdown(&mut self) {
+    fn shutdown(&mut self) {
 
         // Only shutdown if we still got a reader thread
         if let Some(reader_thread) = self.reader_thread.take() {

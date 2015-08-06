@@ -4,7 +4,8 @@ extern crate clock_ticks;
 use std::cmp;
 use std::net::SocketAddr;
 use std::collections::VecDeque;
-use shared::{Config, Handler, UdpSocket};
+use shared::{Config, Handler};
+use shared::traits::Socket;
 
 /// Maximum number of acknowledgement bits available in the packet header.
 pub const MAX_ACK_BITS: u32 = 32;
@@ -296,9 +297,9 @@ impl Connection {
     }
 
     /// Creates a new outgoing UDP packet.
-    pub fn send<T>(
+    pub fn send<T, S: Socket>(
         &mut self,
-        socket: &mut UdpSocket, address: &SocketAddr,
+        socket: &mut S, address: &SocketAddr,
         owner: &mut T, handler: &mut Handler<T>
     ) {
 
