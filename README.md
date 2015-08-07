@@ -11,6 +11,7 @@ article series by Glenn Fiedler.
 ## TODO
 
 - Move out logic for congestion detection / avoidance into a trait so there can be different implementation.
+- Implement the actual `Message` layer on top of the low level connections in order to be able to send both reliable and ordered messages.
 
 
 ## Usage
