@@ -76,10 +76,13 @@ pub struct Connection {
     config: Config,
 
     /// Random Connection ID
-    id: ConnectionID,
+    random_id: ConnectionID,
 
     /// State of the connection
     state: ConnectionState,
+
+    /// The socket address of the remote peer of the connection
+    peer_address: SocketAddr,
 
     /// The most recent received remote sequence number
     remote_seq_number: u32,
@@ -88,7 +91,7 @@ pub struct Connection {
     local_seq_number: u32,
 
     /// Exponentially smoothed moving average of the roundtrip time
-    rtt: f32,
+    smoothed_rtt: f32,
 
     /// Last time a packet was received
     last_receive_time: u32,
@@ -136,22 +139,25 @@ impl Connection {
     /// # Examples
     ///
     /// ```
+    /// use std::net::SocketAddr;
     /// use cobalt::shared::{Connection, ConnectionState, Config};
     ///
-    /// let conn = Connection::new(Config::default());
+    /// let address: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    /// let conn = Connection::new(Config::default(), address);
     ///
-    /// assert_eq!(conn.get_state(), ConnectionState::Connecting);
-    /// assert_eq!(conn.is_open(), true);
+    /// assert_eq!(conn.state(), ConnectionState::Connecting);
+    /// assert_eq!(conn.open(), true);
     /// ```
-    pub fn new(config: Config) -> Connection {
+    pub fn new(config: Config, peer_addr: SocketAddr) -> Connection {
         Connection {
             config: config,
-            id: ConnectionID(rand::random()),
+            random_id: ConnectionID(rand::random()),
             state: ConnectionState::Connecting,
+            peer_address: peer_addr,
             local_seq_number: 0,
             remote_seq_number: 0,
-            rtt: 0.0,
-            last_receive_time: get_time_ms(),
+            smoothed_rtt: 0.0,
+            last_receive_time: precise_time_ms(),
             recv_ack_queue: VecDeque::new(),
             sent_ack_queue: Vec::new(),
             sent_packets: 0,
@@ -204,7 +210,7 @@ impl Connection {
 
     /// Returns whether the connection is currently accepting any incoming
     /// packets.
-    pub fn is_open(&self) -> bool {
+    pub fn open(&self) -> bool {
         match self.state {
             ConnectionState::Connecting => true,
             ConnectionState::Connected => true,
@@ -214,31 +220,41 @@ impl Connection {
 
     /// Return whether the connection is currently congested and should be
     /// sending less data.
-    pub fn is_congested(&self) -> bool {
+    pub fn congested(&self) -> bool {
         self.mode == CongestionMode::Bad
     }
 
     /// Returns the id of the connection.
-    pub fn get_id(&self) -> ConnectionID {
-        self.id
+    pub fn id(&self) -> ConnectionID {
+        self.random_id
     }
 
     /// Returns the current state of the connection.
-    pub fn get_state(&self) -> ConnectionState {
+    pub fn state(&self) -> ConnectionState {
         self.state
     }
 
     /// Returns the average roundtrip time for the connection.
-    pub fn get_rtt(&self) -> u32 {
-        self.rtt.ceil() as u32
+    pub fn rtt(&self) -> u32 {
+        self.smoothed_rtt.ceil() as u32
     }
 
     /// Returns the percent of packets that were sent and never acknowledged
     /// over the total number of packets that have been send across the
     /// connection.
-    pub fn get_packet_loss(&self) -> f32 {
+    pub fn packet_loss(&self) -> f32 {
         100.0 / cmp::max(self.sent_packets, 1) as f32
                            * self.lost_packets as f32
+    }
+
+    /// Returns the socket address of the remote peer of this connection.
+    pub fn peer_addr(&self) -> SocketAddr {
+        self.peer_address
+    }
+
+    /// Sets the socket address of the remote peer of this connection.
+    pub fn set_peer_addr(&mut self, peer_addr: SocketAddr) {
+        self.peer_address = peer_addr;
     }
 
     /// Appends to the data that is going to be send with the next outgoing
@@ -269,7 +285,7 @@ impl Connection {
         }
 
         // Update time used for disconnect detection
-        self.last_receive_time = get_time_ms();
+        self.last_receive_time = precise_time_ms();
 
         // Read remote sequence number
         self.remote_seq_number = packet[8] as u32;
@@ -292,7 +308,7 @@ impl Connection {
 
             // Calculate the RTT from acknowledged packets
             if acked {
-                self.rtt = (self.rtt - (self.rtt - (self.last_receive_time - p.time) as f32) * 0.10).max(0.0);
+                self.smoothed_rtt = (self.smoothed_rtt - (self.smoothed_rtt - (self.last_receive_time - p.time) as f32) * 0.10).max(0.0);
                 self.acked_packets += 1;
                 p.acked = true;
 
@@ -357,10 +373,10 @@ impl Connection {
         packet[3] = self.config.protocol_header[3];
 
         // Set connection ID
-        packet[4] = (self.id.0 >> 24) as u8;
-        packet[5] = (self.id.0 >> 16) as u8;
-        packet[6] = (self.id.0 >> 8) as u8;
-        packet[7] = self.id.0 as u8;
+        packet[4] = (self.random_id.0 >> 24) as u8;
+        packet[5] = (self.random_id.0 >> 16) as u8;
+        packet[6] = (self.random_id.0 >> 8) as u8;
+        packet[7] = self.random_id.0 as u8;
 
         // Set local sequence number
         packet[8] = self.local_seq_number as u8;
@@ -400,7 +416,7 @@ impl Connection {
         if self.send_ack_required(self.local_seq_number) == true {
             self.sent_ack_queue.push(SentPacketAck {
                 seq: self.local_seq_number,
-                time: get_time_ms(),
+                time: precise_time_ms(),
                 acked: false,
                 lost: false,
                 packet: Some(packet)
@@ -427,8 +443,8 @@ impl Connection {
         self.last_mode_switch_time = 0;
         self.local_seq_number = 0;
         self.remote_seq_number = 0;
-        self.rtt = 0.0;
-        self.last_receive_time = get_time_ms();
+        self.smoothed_rtt = 0.0;
+        self.last_receive_time = precise_time_ms();
         self.recv_ack_queue.clear();
         self.sent_ack_queue.clear();
         self.sent_packets = 0;
@@ -489,7 +505,7 @@ impl Connection {
     ) -> bool {
 
         // Calculate time since last received packet
-        let inactive_time = get_time_ms() - self.last_receive_time;
+        let inactive_time = precise_time_ms() - self.last_receive_time;
 
         match self.state {
 
@@ -543,7 +559,7 @@ impl Connection {
 
     fn update_good_congestion<T>(&mut self, owner: &mut T, handler: &mut Handler<T>) {
 
-        if self.get_rtt() <= self.config.congestion_rtt_threshold {
+        if self.rtt() <= self.config.congestion_rtt_threshold {
 
             // The we stay in good mode for a prolonged period of time,
             // we reduce the wait time before trying out good mode in case we
@@ -553,7 +569,7 @@ impl Connection {
                     self.time_until_good_mode / 2,
                     self.config.congestion_switch_min_delay
                 );
-                self.last_mode_switch_time = get_time_ms();
+                self.last_mode_switch_time = precise_time_ms();
             }
 
         } else {
@@ -570,7 +586,7 @@ impl Connection {
                 );
             }
 
-            self.last_mode_switch_time = get_time_ms();
+            self.last_mode_switch_time = precise_time_ms();
 
             handler.connection_congested(owner, self);
 
@@ -580,15 +596,15 @@ impl Connection {
 
     fn update_bad_congestion<T>(&mut self, owner: &mut T, handler: &mut Handler<T>) {
 
-        if self.get_rtt() <= self.config.congestion_rtt_threshold {
+        if self.rtt() <= self.config.congestion_rtt_threshold {
 
             // Switch back to good mode if we stay within the RTT threshold for
             // the required time
-            if get_time_ms() - self.last_mode_switch_time
-                             > self.time_until_good_mode {
+            if precise_time_ms() - self.last_mode_switch_time
+                                 > self.time_until_good_mode {
 
                 self.mode = CongestionMode::Good;
-                self.last_mode_switch_time = get_time_ms();
+                self.last_mode_switch_time = precise_time_ms();
                 handler.connection_congested(owner, self);
             }
 
@@ -596,7 +612,7 @@ impl Connection {
         // switch until we have at least `switch delay` seconds of
         // good RTT
         } else {
-            self.last_mode_switch_time = get_time_ms();
+            self.last_mode_switch_time = precise_time_ms();
         }
 
     }
@@ -608,8 +624,8 @@ impl Connection {
     }
 
     fn mode_switch_delay_exceeded(&self) -> bool {
-        get_time_ms() - self.last_mode_switch_time
-                      > self.config.congestion_switch_wait
+        precise_time_ms() - self.last_mode_switch_time
+                          > self.config.congestion_switch_wait
     }
 
 }
@@ -643,7 +659,7 @@ fn seq_was_acked(seq: u32, ack: u32, bitfield: u32) -> bool {
     }
 }
 
-fn get_time_ms() -> u32 {
+fn precise_time_ms() -> u32 {
     (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 

@@ -38,8 +38,8 @@ impl Client {
         let tick_delay = 1000 / self.config.send_rate;
 
         // Create connection and parse remote address
-        let mut connection = Connection::new(self.config);
-        let remote = try!(address.to_socket_addrs()).next().unwrap();
+        let peer_addr = try!(address.to_socket_addrs()).next().unwrap();
+        let mut connection = Connection::new(self.config, peer_addr);
 
         // Create the UDP socket
         let mut socket = try!(UdpSocket::new(
@@ -59,7 +59,7 @@ impl Client {
             // Receive all incoming UDP packets from the specified remote
             // address feeding them into out connection object for parsing
             while let Ok((addr, packet)) = reader.try_recv() {
-                if addr == remote {
+                if addr == peer_addr {
                     connection.receive(packet, self, handler);
                 }
             }
@@ -70,11 +70,11 @@ impl Client {
             // Check if we should send a packet on the current tick
             // or whether we should reduce the number of sent packets due to
             // congestion
-            if connection.is_congested() == false
+            if connection.congested() == false
                 || tick % self.config.congestion_divider == 0 {
 
                 // Then invoke the connection to send a outgoing packet
-                connection.send(&mut socket, &remote, self, handler);
+                connection.send(&mut socket, &peer_addr, self, handler);
 
             }
 

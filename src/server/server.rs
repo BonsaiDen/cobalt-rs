@@ -68,22 +68,31 @@ impl Server {
                         // In case of a unknown connection id create a new
                         // connection and insert it into out hash map
                         if !connections.contains_key(&id) {
+
                             connections.insert(
-                                id, Connection::new(self.config)
+                                id, Connection::new(self.config, addr)
                             );
+
+                            // We also map the peer address to the ConnectionID.
+                            // this is done in order to reliable track the
+                            // connection in case of address re-assignments by
+                            // network address translation.
+                            addresses.insert(id, addr);
+
                         }
 
-                        // In addition map the sender address to the connection
-                        // id, this is done in order to reliable track the
-                        // connection in case of address re-assignments in some
-                        // NAT.
-                        addresses.insert(id, addr);
+                        // Check for changes in the peer address and update
+                        // the address to ID mapping
+                        let connection = connections.get_mut(&id).unwrap();
+                        if addr != connection.peer_addr() {
+                            connection.set_peer_addr(addr);
+                            addresses.remove(&id).unwrap();
+                            addresses.insert(id, addr);
+                        }
 
                         // Then feed the packet into the connection object for
                         // parsing
-                        connections.get_mut(&id).unwrap().receive(
-                            packet, self, handler
-                        );
+                        connection.receive(packet, self, handler);
 
                     },
                     None => { /* Ignore any invalid packets */ }
@@ -99,8 +108,8 @@ impl Server {
 
                 // If not congested send at full rate otherwise send
                 // at reduced rate
-                if !conn.is_congested() ||
-                    tick % self.config.congestion_divider == 0 {
+                if !conn.congested()
+                    || tick % self.config.congestion_divider == 0 {
 
                     // Resolve the last known remote address for this
                     // connection and send the data
@@ -112,7 +121,7 @@ impl Server {
                 }
 
                 // Collect all lost / closed connections
-                if conn.is_open() == false {
+                if conn.open() == false {
                     dropped.push(*id);
                 }
 
@@ -120,8 +129,7 @@ impl Server {
 
             // Remove any dropped connections and their address mappings
             for id in dropped.iter() {
-                let mut conn = connections.remove(id).unwrap();
-                conn.reset();
+                connections.remove(id).unwrap().reset();
                 addresses.remove(id).unwrap();
             }
 

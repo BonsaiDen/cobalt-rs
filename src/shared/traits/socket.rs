@@ -16,7 +16,7 @@ pub trait Socket {
 
     /// Sends `data` to the specified remote address.
     fn send<T: net::ToSocketAddrs>(
-        &self, addr: T, data: &[u8])
+        &mut self, addr: T, data: &[u8])
     -> Result<usize, Error>;
 
 }
