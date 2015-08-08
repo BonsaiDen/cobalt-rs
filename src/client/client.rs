@@ -1,6 +1,6 @@
 use std::thread;
 use std::io::Error;
-use std::net::ToSocketAddrs;
+use std::net::{SocketAddr, ToSocketAddrs};
 use shared::{Config, Connection, UdpSocket};
 use shared::traits::{Handler, Socket};
 
@@ -8,7 +8,8 @@ use shared::traits::{Handler, Socket};
 /// transmission.
 pub struct Client {
     closed: bool,
-    config: Config
+    config: Config,
+    address: Option<SocketAddr>
 }
 
 impl Client {
@@ -17,8 +18,14 @@ impl Client {
     pub fn new(config: Config) -> Client {
         Client {
             closed: false,
-            config: config
+            config: config,
+            address: None
         }
+    }
+
+    /// Returns the address the client is currently connected to.
+    pub fn peer_addr(&self) -> Option<SocketAddr> {
+        self.address
     }
 
     /// Tries to establish a reliable UDP based connection to the server
@@ -46,6 +53,8 @@ impl Client {
             "127.0.0.1:0",
             self.config.packet_max_size
         ));
+
+        self.address = Some(try!(socket.local_addr()));
 
         // Extract packet reader
         let reader = socket.reader().unwrap();
@@ -91,6 +100,7 @@ impl Client {
 
         // Invoke handler
         handler.close(self);
+        self.address = None;
 
         // Reset connection state
         connection.reset();

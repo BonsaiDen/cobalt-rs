@@ -9,7 +9,8 @@ use shared::traits::{Socket, Handler};
 /// unreliable packet transmission.
 pub struct Server {
     closed: bool,
-    config: Config
+    config: Config,
+    address: Option<SocketAddr>
 }
 
 impl Server {
@@ -18,8 +19,14 @@ impl Server {
     pub fn new(config: Config) -> Server {
         Server {
             closed: false,
-            config: config
+            config: config,
+            address: None
         }
+    }
+
+    /// Returns the address the server is currently bound to.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.address
     }
 
     /// Tries to bind a reliable UDP based server to the specified local
@@ -43,6 +50,8 @@ impl Server {
             address,
             self.config.packet_max_size
         ));
+
+        self.address = Some(try!(socket.local_addr()));
 
         // Extract packet reader
         let reader = socket.reader().unwrap();
@@ -147,6 +156,7 @@ impl Server {
 
         // Invoke handler
         handler.shutdown(self);
+        self.address = None;
 
         // Reset all connection states
         for (_, conn) in connections.iter_mut() {
