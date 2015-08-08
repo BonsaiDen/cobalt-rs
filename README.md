@@ -1,8 +1,11 @@
-# cobalt - low level, reliable UDP based networking
+# cobalt [![Build Status](https://travis-ci.org/BonsaiDen/cobalt-rs.svg)](https://travis-ci.org/BonsaiDen/cobalt-rs)[![Crates.io](https://img.shields.io/crates/v/cobalt.svg?style=flat-square)](https://crates.io/crates/cobalt)
 
-A implementation of a basic, reliable UDP based networking protocol in [rust](https://rust-lang.org/).
+A low level, UDP based networking library.
 
-Mostly designed after the [UDP vs. TCP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) 
+**cobalt** is a [rust](https://rust-lang.org/) based implementation of a simple, 
+UDP networking protocol.
+
+It is mostly designed after the [UDP vs. TCP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) 
 article series by Glenn Fiedler.
 
 - [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt)
@@ -11,7 +14,7 @@ article series by Glenn Fiedler.
 ## TODO
 
 - Move out logic for congestion detection / avoidance into a trait so there can be different implementation.
-- Implement the actual `Message` layer on top of the low level connections in order to be able to send both reliable and ordered messages.
+- Implement a reliable messaging layer on top of the low level connection read/write interface in order to be able to send unreliable, reliable and ordered messages.
 
 
 ## Usage
@@ -20,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-cobalt = "0.1.0"
+cobalt = "0.1.1"
 ```
 
 and this to your crate root:
