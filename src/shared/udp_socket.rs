@@ -83,7 +83,6 @@ impl UdpSocket {
         self.socket.local_addr()
     }
 
-
     /// Shuts down the socket by stopping its internal reader thread.
     pub fn shutdown(&mut self) {
 
