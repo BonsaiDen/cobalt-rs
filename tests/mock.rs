@@ -18,16 +18,16 @@ impl Handler<MockOwner> for MockOwnerHandler {}
 
 
 // Socket Mock ----------------------------------------------------------------
-pub struct MockSocket<'a> {
-    send_packets: &'a Vec<Vec<u8>>,
+pub struct MockSocket {
+    send_packets: Vec<Vec<u8>>,
     send_index: usize,
     sender: Sender<(net::SocketAddr, Vec<u8>)>,
     receiver: Option<SocketReader>
 }
 
-impl<'a> MockSocket<'a> {
+impl MockSocket {
 
-    pub fn new(send_packets: &'a Vec<Vec<u8>>) -> MockSocket<'a> {
+    pub fn new(send_packets: Vec<Vec<u8>>) -> MockSocket {
 
         let (sender, receiver) = channel::<(net::SocketAddr, Vec<u8>)>();
 
@@ -40,9 +40,14 @@ impl<'a> MockSocket<'a> {
 
     }
 
+    pub fn expect(&mut self, send_packets: Vec<Vec<u8>>) {
+        self.send_index = 0;
+        self.send_packets = send_packets;
+    }
+
 }
 
-impl<'a> Socket for MockSocket<'a> {
+impl Socket for MockSocket {
 
     fn reader(&mut self) -> Option<SocketReader> {
         self.receiver.take()

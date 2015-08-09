@@ -40,6 +40,63 @@ fn connection_reset() {
 }
 
 #[test]
+fn connection_send_sequence_wrap_around() {
+
+    let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
+    let mut conn = Connection::new(Config::default(), address);
+
+    let mut socket = MockSocket::new(Vec::new());
+    let mut owner = MockOwner;
+    let mut handler = MockOwnerHandler;
+
+    for i in 0..256 {
+
+        let expected = vec![[
+            // protocol id
+            1, 2, 3, 4,
+
+            // connection id
+            (conn.id().0 >> 24) as u8,
+            (conn.id().0 >> 16) as u8,
+            (conn.id().0 >> 8) as u8,
+             conn.id().0 as u8,
+
+            i as u8, // local sequence number
+            0, // remote sequence number
+            0, 0, 0, 0  // ack bitfield
+
+        ].to_vec()];
+
+        socket.expect(expected);
+
+        conn.send(&mut socket, &address, &mut owner, &mut handler);
+
+    }
+
+    // Should now have wrapped around
+    let expected = vec![[
+        // protocol id
+        1, 2, 3, 4,
+
+        // connection id
+        (conn.id().0 >> 24) as u8,
+        (conn.id().0 >> 16) as u8,
+        (conn.id().0 >> 8) as u8,
+         conn.id().0 as u8,
+
+        0, // local sequence number
+        0, // remote sequence number
+        0, 0, 0, 0  // ack bitfield
+
+    ].to_vec()];
+
+    socket.expect(expected);
+
+    conn.send(&mut socket, &address, &mut owner, &mut handler);
+
+}
+
+#[test]
 fn connection_send_and_receive() {
 
     let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
@@ -112,7 +169,7 @@ fn connection_send_and_receive() {
 
 
     // Testing
-    let mut socket = MockSocket::new(&expected_packets);
+    let mut socket = MockSocket::new(expected_packets);
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
 
@@ -224,47 +281,46 @@ fn server_client_connection() {
     // Get a free local socket and then drop it for quick re-use
     // this is note 100% safe but we cannot easily get the locally bound server
     // address after bind() has been called
-    let mut address: Option<net::SocketAddr> = None;
-    {
-        address = Some(net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
-    }
+    let address: Option<net::SocketAddr> = {
+        Some(net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap())
+    };
 
     let server_address = address.clone();
     thread::spawn(move|| {
 
         let config = Config::default();
-        let mut serverHandler = MockServerHandler::new(35);
+        let mut server_handler = MockServerHandler::new(35);
         let mut server = Server::new(config);
-        server.bind(&mut serverHandler, server_address.unwrap()).unwrap();
+        server.bind(&mut server_handler, server_address.unwrap()).unwrap();
 
-        assert_eq!(serverHandler.bind_calls, 1);
-        assert!(serverHandler.tick_connections_calls > 0);
-        assert_eq!(serverHandler.shutdown_calls, 1);
+        assert_eq!(server_handler.bind_calls, 1);
+        assert!(server_handler.tick_connections_calls > 0);
+        assert_eq!(server_handler.shutdown_calls, 1);
 
-        assert_eq!(serverHandler.connection_calls, 1);
-        assert_eq!(serverHandler.connection_failed_calls, 0);
-        assert_eq!(serverHandler.connection_congested_calls, 0);
-        assert_eq!(serverHandler.connection_packet_lost_calls, 0);
-        assert_eq!(serverHandler.connection_lost_calls, 0);
+        assert_eq!(server_handler.connection_calls, 1);
+        assert_eq!(server_handler.connection_failed_calls, 0);
+        assert_eq!(server_handler.connection_congested_calls, 0);
+        assert_eq!(server_handler.connection_packet_lost_calls, 0);
+        assert_eq!(server_handler.connection_lost_calls, 0);
 
     });
 
     let config = Config::default();
-    let mut clientHandler = MockClientHandler::new();
+    let mut client_handler = MockClientHandler::new();
     let mut client = Client::new(config);
-    let result = client.connect(&mut clientHandler, address.unwrap());
+    client.connect(&mut client_handler, address.unwrap()).unwrap();
 
-    assert_eq!(clientHandler.connect_calls, 1);
-    assert!(clientHandler.tick_connection_calls > 0);
-    assert_eq!(clientHandler.close_calls, 1);
+    assert_eq!(client_handler.connect_calls, 1);
+    assert!(client_handler.tick_connection_calls > 0);
+    assert_eq!(client_handler.close_calls, 1);
 
-    assert_eq!(clientHandler.connection_calls, 1);
-    assert_eq!(clientHandler.connection_failed_calls, 0);
-    assert_eq!(clientHandler.connection_congested_calls, 0);
+    assert_eq!(client_handler.connection_calls, 1);
+    assert_eq!(client_handler.connection_failed_calls, 0);
+    assert_eq!(client_handler.connection_congested_calls, 0);
     // This is somewhat random and depends on how excatly the two threads
     // interact
-    // assert_eq!(clientHandler.connection_packet_lost_calls, 0);
-    assert_eq!(clientHandler.connection_lost_calls, 1);
+    // assert_eq!(client_handler.connection_packet_lost_calls, 0);
+    assert_eq!(client_handler.connection_lost_calls, 1);
 
 }
 
