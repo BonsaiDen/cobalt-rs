@@ -31,6 +31,11 @@
 //! Below is a very basic example implementation for a game server.
 //!
 //! ```
+//! use std::collections::HashMap;
+//! use cobalt::shared::{Connection, ConnectionID};
+//! use cobalt::shared::traits::Handler;
+//! use cobalt::server::Server;
+//!
 //! struct GameServer {
 //!     motd: String
 //! }
@@ -77,6 +82,11 @@
 //! having differnt names.
 //!
 //! ```
+//! use std::collections::HashMap;
+//! use cobalt::shared::Connection;
+//! use cobalt::shared::traits::Handler;
+//! use cobalt::client::Client;
+//!
 //! struct GameClient;
 //! impl Handler<Client> for GameClient {
 //!
