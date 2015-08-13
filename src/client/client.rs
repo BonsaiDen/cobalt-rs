@@ -69,7 +69,7 @@ impl Client {
             // address feeding them into out connection object for parsing
             while let Ok((addr, packet)) = reader.try_recv() {
                 if addr == peer_addr {
-                    connection.receive(packet, self, handler);
+                    connection.receive_packet(packet, self, handler);
                 }
             }
 
@@ -83,7 +83,7 @@ impl Client {
                 || tick % self.config.congestion_divider == 0 {
 
                 // Then invoke the connection to send a outgoing packet
-                connection.send(&mut socket, &peer_addr, self, handler);
+                connection.send_packet(&mut socket, &peer_addr, self, handler);
 
             }
 

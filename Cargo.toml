@@ -1,12 +1,12 @@
 [package]
 name = "cobalt"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Ivo Wetzel <ivo.wetzel@googlemail.com>"]
 description="A low level, UDP based networking library."
 documentation = "https://bonsaiden.github.io/cobalt-rs/doc/cobalt"
 repository = "https://github.com/BonsaiDen/cobalt-rs.git"
 readme = "README.md"
-keywords = ["udp", "protocol", "connection", "network"]
+keywords = [ "virtual", "udp", "connection", "message", "queue"]
 license="MIT"
 
 [dependencies]

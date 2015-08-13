@@ -43,7 +43,19 @@ pub struct Config {
 
     /// Maximum milliseconds between turning on / off congestion avoidance.
     /// Default is `60000`.
-    pub congestion_switch_max_delay: u32
+    pub congestion_switch_max_delay: u32,
+
+    /// The percent of available packet bytes to use when serializing
+    /// `MessageKind::Instant` into a packet via a `MessageQueue`.
+    pub message_quota_instant: f32,
+
+    /// The percent of available packet bytes to use when serializing
+    /// `MessageKind::Reliable` into a packet via a `MessageQueue`.
+    pub message_quota_reliable: f32,
+
+    /// The percent of available packet bytes to use when serializing
+    /// `MessageKind::Ordered` into a packet via a `MessageQueue`.
+    pub message_quota_ordered: f32
 
 }
 
@@ -61,7 +73,10 @@ impl Default for Config {
             congestion_rtt_threshold: 250,
             congestion_switch_wait: 10000,
             congestion_switch_min_delay: 1000,
-            congestion_switch_max_delay: 60000
+            congestion_switch_max_delay: 60000,
+            message_quota_instant: 60.0,
+            message_quota_reliable: 20.0,
+            message_quota_ordered: 20.0
         }
     }
 

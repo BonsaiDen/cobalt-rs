@@ -1,10 +1,11 @@
 extern crate cobalt;
 
 use std::env;
+use std::str;
 use std::collections::HashMap;
 use cobalt::client::Client;
 use cobalt::server::Server;
-use cobalt::shared::{Config, Connection, ConnectionID};
+use cobalt::shared::{Config, Connection, ConnectionID, MessageKind};
 use cobalt::shared::traits::Handler;
 
 struct ServerHandler;
@@ -19,7 +20,7 @@ impl Handler<Server> for ServerHandler {
         connections: &mut HashMap<ConnectionID, Connection>
     ) {
         for (_, conn) in connections.iter_mut() {
-            conn.write(b"Hello World");
+            conn.send(MessageKind::Reliable, b"Hello World".to_vec());
         }
     }
 
@@ -59,8 +60,9 @@ impl Handler<Client> for ClientHandler {
     }
 
     fn tick_connection(&mut self, _: &mut Client, conn: &mut Connection) {
-        let data = conn.read();
-        println!("Received {} bytes of data", data.len());
+        for msg in conn.received() {
+            println!("Received Message: {}", str::from_utf8(&msg).unwrap());
+        }
     }
 
     fn close(&mut self, _: &mut Client) {
@@ -101,13 +103,13 @@ fn main() {
                 let config = Config::default();
                 let mut handler = ClientHandler;
                 let mut client = Client::new(config);
-                client.connect(&mut handler, "127.0.0.1:7156");
+                client.connect(&mut handler, "127.0.0.1:7156").unwrap();
             },
             "server" => {
                 let config = Config::default();
                 let mut handler = ServerHandler;
                 let mut server = Server::new(config);
-                server.bind(&mut handler, "127.0.0.1:7156");
+                server.bind(&mut handler, "127.0.0.1:7156").unwrap();
             },
             _ => {
 

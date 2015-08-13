@@ -101,7 +101,7 @@ impl Server {
 
                         // Then feed the packet into the connection object for
                         // parsing
-                        connection.receive(packet, self, handler);
+                        connection.receive_packet(packet, self, handler);
 
                     },
                     None => { /* Ignore any invalid packets */ }
@@ -125,7 +125,7 @@ impl Server {
                     let addr = addresses.get(id).unwrap();
 
                     // Then invoke the connection to send a outgoing packet
-                    conn.send(&mut socket, addr, self, handler);
+                    conn.send_packet(&mut socket, addr, self, handler);
 
                 }
 
