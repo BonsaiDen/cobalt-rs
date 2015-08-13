@@ -9,5 +9,7 @@ mod connection;
 mod message_queue;
 mod binary_rate_limiter;
 mod udp_socket;
+
+/// Traits for customizable connection handling.
 pub mod traits;
 

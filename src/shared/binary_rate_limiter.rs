@@ -32,6 +32,8 @@ pub struct BinaryRateLimiter {
 }
 
 impl BinaryRateLimiter {
+
+    /// Creates a new rate limiter.
     pub fn new(config: &Config) -> Box<BinaryRateLimiter> {
 
         let rate = config.send_rate as f32;
@@ -49,6 +51,7 @@ impl BinaryRateLimiter {
         })
 
     }
+
 }
 
 impl RateLimiter for BinaryRateLimiter {

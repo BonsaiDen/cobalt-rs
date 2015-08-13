@@ -243,13 +243,13 @@ impl Connection {
         self.peer_address = peer_addr;
     }
 
-    /// Sends a message of the specified `kind` along with its `data` over the
-    /// connection.
+    /// Sends a message of the specified `kind` along with its `payload` over
+    /// the connection.
     ///
-    /// How exactly the message is send and whether it is guranteed to be
+    /// How exactly the message is send and whether it is guaranteed to be
     /// delivered eventually is determined by its `MessageKind`.
-    pub fn send(&mut self, kind: MessageKind, data: Vec<u8>) {
-        self.message_queue.send(kind, data);
+    pub fn send(&mut self, kind: MessageKind, payload: Vec<u8>) {
+        self.message_queue.send(kind, payload);
     }
 
     /// Returns a consuming iterator over all messages received over this
@@ -483,7 +483,10 @@ impl Connection {
                 // connection as established
                 self.state = ConnectionState::Connected;
                 handler.connection(owner, self);
-                true
+
+                // The connection handler might decide to immediately disconnect
+                // us, so we check out state again
+                self.state == ConnectionState::Connected
 
             },
 
