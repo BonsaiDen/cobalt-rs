@@ -5,7 +5,7 @@ use std::cmp;
 use std::net::SocketAddr;
 use std::collections::VecDeque;
 use shared::{Config, MessageKind, MessageQueue};
-use shared::traits::{Socket, Handler};
+use shared::traits::{Handler, RateLimiter, Socket};
 use super::message_queue::MessageIterator;
 
 /// Maximum number of acknowledgement bits available in the packet header.
@@ -40,13 +40,6 @@ pub enum ConnectionState {
     /// The connection has been closed programmatically.
     Closed
 
-}
-
-/// Congestion mode of the connection.
-#[derive(PartialEq)]
-enum CongestionMode {
-    Good,
-    Bad
 }
 
 /// A struct used for packet acknowledgment of sent packets.
@@ -115,18 +108,11 @@ pub struct Connection {
     /// Number of all packets sent which were lost
     acked_packets: u32,
 
-    /// Sending mode of the connection, based on congestion
-    mode: CongestionMode,
-
-    /// Time in milliseconds until we try out `Good` mode when in `Bad`
-    /// congestion mode.
-    time_until_good_mode: u32,
-
-    /// Last time the congestion mode switched
-    last_mode_switch_time: u32,
-
     /// The internal message queue of the connection
-    message_queue: MessageQueue
+    message_queue: MessageQueue,
+
+    /// The rate limiter used to handle and avoid network congestion
+    rate_limiter: Box<RateLimiter>
 
 }
 
@@ -138,15 +124,20 @@ impl Connection {
     ///
     /// ```
     /// use std::net::SocketAddr;
-    /// use cobalt::shared::{Connection, ConnectionState, Config};
+    /// use cobalt::shared::{BinaryRateLimiter, Connection, ConnectionState, Config};
     ///
+    /// let config = Config::default();
     /// let address: SocketAddr = "127.0.0.1:0".parse().unwrap();
-    /// let conn = Connection::new(Config::default(), address);
+    /// let limiter = BinaryRateLimiter::new(&config);
+    /// let conn = Connection::new(config, address, limiter);
     ///
     /// assert_eq!(conn.state(), ConnectionState::Connecting);
     /// assert_eq!(conn.open(), true);
     /// ```
-    pub fn new(config: Config, peer_addr: SocketAddr) -> Connection {
+    pub fn new(
+        config: Config, peer_addr: SocketAddr, rate_limiter: Box<RateLimiter>
+
+    ) -> Connection {
         Connection {
             config: config,
             random_id: ConnectionID(rand::random()),
@@ -162,10 +153,8 @@ impl Connection {
             recv_packets: 0,
             acked_packets: 0,
             lost_packets: 0,
-            mode: CongestionMode::Good,
-            time_until_good_mode: config.congestion_switch_min_delay,
-            last_mode_switch_time: 0,
-            message_queue: MessageQueue::new(config)
+            message_queue: MessageQueue::new(config),
+            rate_limiter: rate_limiter
         }
     }
 
@@ -215,10 +204,10 @@ impl Connection {
         }
     }
 
-    /// Return whether the connection is currently congested and should be
-    /// sending less data.
+    /// Returns whether the connection is currently congested and should be
+    /// sending less packets per second in order to resolve the congestion.
     pub fn congested(&self) -> bool {
-        self.mode == CongestionMode::Bad
+        self.rate_limiter.congested()
     }
 
     /// Returns the id of the connection.
@@ -356,8 +345,22 @@ impl Connection {
             return;
         }
 
+        let congested = self.rate_limiter.congested();
+        let rtt = self.rtt();
+        let packet_loss = self.packet_loss();
+
         // Update congestion state
-        self.update_congestion_state(owner, handler);
+        self.rate_limiter.update(rtt, packet_loss);
+
+        // Check if the state changed and invoke handler
+        if congested != self.rate_limiter.congested() {
+            handler.connection_congestion_state(owner, self, !congested);
+        }
+
+        // Check if we should be sending packets, if not skip this packet
+        if self.rate_limiter.should_send() == false {
+            return;
+        }
 
         // Take write buffer out and insert a fresh, empty one in its place
         let mut packet = Vec::<u8>::with_capacity(HEADER_BYTES);
@@ -439,9 +442,6 @@ impl Connection {
     /// Resets the connection for re-use with another address.
     pub fn reset(&mut self) {
         self.state = ConnectionState::Connecting;
-        self.mode = CongestionMode::Good;
-        self.time_until_good_mode = self.config.congestion_switch_min_delay;
-        self.last_mode_switch_time = 0;
         self.local_seq_number = 0;
         self.remote_seq_number = 0;
         self.smoothed_rtt = 0.0;
@@ -453,6 +453,7 @@ impl Connection {
         self.acked_packets = 0;
         self.lost_packets = 0;
         self.message_queue.reset();
+        self.rate_limiter.reset();
     }
 
     /// Closes the connection, no further packets will be received or send.
@@ -546,90 +547,9 @@ impl Connection {
 
     }
 
-    // Internal Congestion Handling -------------------------------------------
-
-    fn update_congestion_state<T>(
-        &mut self, owner: &mut T, handler: &mut Handler<T>
-    ) {
-        match self.mode {
-            CongestionMode::Good => self.update_good_congestion(owner, handler),
-            CongestionMode::Bad => self.update_bad_congestion(owner, handler)
-        }
-    }
-
-    fn update_good_congestion<T>(
-        &mut self, owner: &mut T, handler: &mut Handler<T>
-    ) {
-
-        if self.rtt() <= self.config.congestion_rtt_threshold {
-
-            // The we stay in good mode for a prolonged period of time,
-            // we reduce the wait time before trying out good mode in case we
-            // entered bad mode
-            if self.mode_switch_delay_exceeded() {
-                self.time_until_good_mode = cmp::max(
-                    self.time_until_good_mode / 2,
-                    self.config.congestion_switch_min_delay
-                );
-                self.last_mode_switch_time = precise_time_ms();
-            }
-
-        } else {
-
-            // Switch to bad mode once we exceed the RTT threshold
-            self.mode = CongestionMode::Bad;
-
-            // If we back fall into bad mode quickly, we'll double the wait
-            // time before we try out good mode
-            if self.mode_switch_delay_exceeded() == false {
-                self.time_until_good_mode = cmp::min(
-                    self.time_until_good_mode * 2,
-                    self.config.congestion_switch_max_delay
-                );
-            }
-
-            self.last_mode_switch_time = precise_time_ms();
-
-            handler.connection_congested(owner, self);
-
-        }
-
-    }
-
-    fn update_bad_congestion<T>(
-        &mut self, owner: &mut T, handler: &mut Handler<T>
-    ) {
-
-        if self.rtt() <= self.config.congestion_rtt_threshold {
-
-            // Switch back to good mode if we stay within the RTT threshold for
-            // the required time
-            if precise_time_ms() - self.last_mode_switch_time
-                                 > self.time_until_good_mode {
-
-                self.mode = CongestionMode::Good;
-                self.last_mode_switch_time = precise_time_ms();
-                handler.connection_congested(owner, self);
-            }
-
-        // If we still got congestion, we further delay the next mode
-        // switch until we have at least `switch delay` seconds of
-        // good RTT
-        } else {
-            self.last_mode_switch_time = precise_time_ms();
-        }
-
-    }
-
-
     // Internal Helpers -------------------------------------------------------
     fn send_ack_required(&self, seq: u32) -> bool {
         self.sent_ack_queue.iter().any(|p| p.seq == seq) == false
-    }
-
-    fn mode_switch_delay_exceeded(&self) -> bool {
-        precise_time_ms() - self.last_mode_switch_time
-                          > self.config.congestion_switch_wait
     }
 
 }
@@ -671,13 +591,19 @@ mod tests {
     use std::io::Error;
     use std::sync::mpsc::channel;
 
-    use shared::{Connection, ConnectionState, Config, MessageKind};
+    use shared::{BinaryRateLimiter, Connection, ConnectionState, Config, MessageKind};
     use shared::traits::{Handler, Socket, SocketReader};
+
+    fn connection() -> Connection {
+        let config = Config::default();
+        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
+        let limiter = BinaryRateLimiter::new(&config);
+        Connection::new(config, address, limiter)
+    }
 
     #[test]
     fn test_create() {
-        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-        let conn = Connection::new(Config::default(), address);
+        let conn = connection();
         assert_eq!(conn.open(), true);
         assert_eq!(conn.congested(), false);
         assert_eq!(conn.state(), ConnectionState::Connecting);
@@ -687,8 +613,7 @@ mod tests {
 
     #[test]
     fn test_close() {
-        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-        let mut conn = Connection::new(Config::default(), address);
+        let mut conn = connection();
         conn.close();
         assert_eq!(conn.open(), false);
         assert_eq!(conn.state(), ConnectionState::Closed);
@@ -696,8 +621,7 @@ mod tests {
 
     #[test]
     fn test_reset() {
-        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-        let mut conn = Connection::new(Config::default(), address);
+        let mut conn = connection();
         conn.close();
         conn.reset();
         assert_eq!(conn.open(), true);
@@ -707,9 +631,8 @@ mod tests {
     #[test]
     fn test_send_sequence_wrap_around() {
 
-        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-        let mut conn = Connection::new(Config::default(), address);
-
+        let mut conn = connection();
+        let address = conn.peer_addr();
         let mut socket = MockSocket::new(Vec::new());
         let mut owner = MockOwner;
         let mut handler = MockOwnerHandler;
@@ -764,8 +687,8 @@ mod tests {
     #[test]
     fn test_send_and_receive_packet() {
 
-        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-        let mut conn = Connection::new(Config::default(), address);
+        let mut conn = connection();
+        let address = conn.peer_addr();
         let mut expected_packets: Vec<Vec<u8>> = Vec::new();
 
         // Initial packet
@@ -891,8 +814,8 @@ mod tests {
     #[test]
     fn test_send_and_receive_message() {
 
-        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-        let mut conn = Connection::new(Config::default(), address);
+        let mut conn = connection();
+        let address = conn.peer_addr();
         let mut owner = MockOwner;
         let mut handler = MockOwnerHandler;
 

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use shared::{Config, Connection, ConnectionID, UdpSocket};
 use shared::traits::{Socket, Handler};
 
-/// A multi-client server that uses a reliable UDP connection for
-/// unreliable packet transmission.
+/// A multi-client server that uses a virtual UDP connection for reliable
+/// message transmission.
 pub struct Server {
     closed: bool,
     config: Config,
@@ -15,7 +15,7 @@ pub struct Server {
 
 impl Server {
 
-    /// Creates a new server with the given connection configuration.
+    /// Creates a new server with the given configuration.
     pub fn new(config: Config) -> Server {
         Server {
             closed: false,
@@ -24,15 +24,15 @@ impl Server {
         }
     }
 
-    /// Returns the address the server is currently bound to.
+    /// Returns the local address the server is currently bound to.
     pub fn local_addr(&self) -> Option<SocketAddr> {
         self.address
     }
 
-    /// Tries to bind a reliable UDP based server to the specified local
-    /// address which actively listens and manages incoming client connections.
+    /// Tries to bind the server to the specified local address and actively
+    /// listens for and manages incoming client connections.
     ///
-    /// The clients must use a compatible connection configuration in order for
+    /// The clients must use a compatible configuration in order for
     /// connections to be actually established.
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
@@ -40,10 +40,6 @@ impl Server {
     pub fn bind<T: ToSocketAddrs>(
         &mut self, handler: &mut Handler<Server>, address: T
     ) -> Result<(), Error> {
-
-        // Internal ticker for send rate control
-        let mut tick = 0;
-        let tick_delay = 1000 / self.config.send_rate;
 
         // Create the UDP socket
         let mut socket = try!(UdpSocket::new(
@@ -74,15 +70,19 @@ impl Server {
                 match Connection::id_from_packet(&self.config, &packet) {
                     Some(id) => {
 
-                        // In case of a unknown connection id create a new
-                        // connection and insert it into out hash map
                         if !connections.contains_key(&id) {
 
-                            connections.insert(
-                                id, Connection::new(self.config, addr)
+                            // In case of a unknown ConnectionID we create a
+                            // new connection and map it to the id
+                            let conn = Connection::new(
+                                self.config,
+                                addr,
+                                handler.rate_limiter(&self.config)
                             );
 
-                            // We also map the peer address to the ConnectionID.
+                            connections.insert(id, conn);
+
+                            // We also map the initial peer address to the id.
                             // this is done in order to reliable track the
                             // connection in case of address re-assignments by
                             // network address translation.
@@ -115,19 +115,12 @@ impl Server {
             // Create outgoing packets for all connections
             for (id, conn) in connections.iter_mut() {
 
-                // If not congested send at full rate otherwise send
-                // at reduced rate
-                if !conn.congested()
-                    || tick % self.config.congestion_divider == 0 {
+                // Resolve the last known remote address for this
+                // connection and send the data
+                let addr = addresses.get(id).unwrap();
 
-                    // Resolve the last known remote address for this
-                    // connection and send the data
-                    let addr = addresses.get(id).unwrap();
-
-                    // Then invoke the connection to send a outgoing packet
-                    conn.send_packet(&mut socket, addr, self, handler);
-
-                }
+                // Then invoke the connection to send a outgoing packet
+                conn.send_packet(&mut socket, addr, self, handler);
 
                 // Collect all lost / closed connections
                 if conn.open() == false {
@@ -145,12 +138,7 @@ impl Server {
             dropped.clear();
 
             // Next Tick
-            thread::sleep_ms(tick_delay);
-            tick += 1;
-
-            if tick == self.config.send_rate {
-                tick = 0;
-            }
+            thread::sleep_ms(1000 / self.config.send_rate);
 
         }
 
@@ -170,7 +158,7 @@ impl Server {
 
     }
 
-    /// Shutsdown the server, closing all its active connections.
+    /// Shuts down the server, closing all active connections.
     pub fn shutdown(&mut self) {
         self.closed = true;
     }

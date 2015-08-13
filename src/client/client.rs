@@ -4,7 +4,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use shared::{Config, Connection, UdpSocket};
 use shared::traits::{Handler, Socket};
 
-/// A server client that uses a reliable UDP connection for unreliable packet
+/// A server client that uses a virtual UDP connection for reliable message
 /// transmission.
 pub struct Client {
     closed: bool,
@@ -14,7 +14,7 @@ pub struct Client {
 
 impl Client {
 
-    /// Creates a new client with the given connection configuration.
+    /// Creates a new client with the given configuration.
     pub fn new(config: Config) -> Client {
         Client {
             closed: false,
@@ -23,15 +23,14 @@ impl Client {
         }
     }
 
-    /// Returns the address the client is currently connected to.
+    /// Returns the address of the server the client is currently connected to.
     pub fn peer_addr(&self) -> Option<SocketAddr> {
         self.address
     }
 
-    /// Tries to establish a reliable UDP based connection to the server
-    /// specified by the address.
+    /// Tries to establish connection to the server specified by the address.
     ///
-    /// The server must use a compatible connection configuration in order for
+    /// The server must use a compatible configuration in order for
     /// the connection to be actually established.
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
@@ -40,13 +39,13 @@ impl Client {
         &mut self, handler: &mut Handler<Client>, address: T
     ) -> Result<(), Error> {
 
-        // Ticker for send rate control
-        let mut tick = 0;
-        let tick_delay = 1000 / self.config.send_rate;
-
         // Create connection and parse remote address
         let peer_addr = try!(address.to_socket_addrs()).next().unwrap();
-        let mut connection = Connection::new(self.config, peer_addr);
+        let mut connection = Connection::new(
+            self.config,
+            peer_addr,
+            handler.rate_limiter(&self.config)
+        );
 
         // Create the UDP socket
         let mut socket = try!(UdpSocket::new(
@@ -76,25 +75,11 @@ impl Client {
             // Invoke handler
             handler.tick_connection(self, &mut connection);
 
-            // Check if we should send a packet on the current tick
-            // or whether we should reduce the number of sent packets due to
-            // congestion
-            if connection.congested() == false
-                || tick % self.config.congestion_divider == 0 {
-
-                // Then invoke the connection to send a outgoing packet
-                connection.send_packet(&mut socket, &peer_addr, self, handler);
-
-            }
+            // Invoke the connection to send a outgoing packet
+            connection.send_packet(&mut socket, &peer_addr, self, handler);
 
             // Limit ticks per second to the configured amount
-            thread::sleep_ms(tick_delay);
-
-            tick += 1;
-
-            if tick == self.config.send_rate {
-                tick = 0;
-            }
+            thread::sleep_ms(1000 / self.config.send_rate);
 
         }
 

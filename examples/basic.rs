@@ -42,8 +42,8 @@ impl Handler<Server> for ServerHandler {
         println!("Server::connection_packet_loss {}", p.len());
     }
 
-    fn connection_congested(&mut self, _: &mut Server, _: &mut Connection) {
-        println!("Server::connection_congested");
+    fn connection_congestion_state(&mut self, _: &mut Server, _: &mut Connection, state: bool) {
+        println!("Server::connection_congestion_state {}", state);
     }
 
     fn connection_lost(&mut self, _: &mut Server, _: &mut Connection) {
@@ -84,8 +84,8 @@ impl Handler<Client> for ClientHandler {
         println!("Client::connection_packet_loss");
     }
 
-    fn connection_congested(&mut self, _: &mut Client, _: &mut Connection) {
-        println!("Client::connection_congested");
+    fn connection_congestion_state(&mut self, _: &mut Client, _: &mut Connection, state: bool) {
+        println!("Client::connection_congestion_state {}", state);
     }
 
     fn connection_lost(&mut self, client: &mut Client, _: &mut Connection) {

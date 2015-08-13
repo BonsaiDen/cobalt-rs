@@ -22,7 +22,7 @@ fn client_connection_failure() {
 
     assert_eq!(handler.connection_calls, 0);
     assert_eq!(handler.connection_failed_calls, 1);
-    assert_eq!(handler.connection_congested_calls, 0);
+    assert_eq!(handler.connection_congestion_state_calls, 0);
     assert_eq!(handler.connection_packet_lost_calls, 0);
     assert_eq!(handler.connection_lost_calls, 0);
 
@@ -42,7 +42,7 @@ fn server_bind_and_shutdown() {
 
     assert_eq!(handler.connection_calls, 0);
     assert_eq!(handler.connection_failed_calls, 0);
-    assert_eq!(handler.connection_congested_calls, 0);
+    assert_eq!(handler.connection_congestion_state_calls, 0);
     assert_eq!(handler.connection_packet_lost_calls, 0);
     assert_eq!(handler.connection_lost_calls, 0);
 
@@ -72,7 +72,7 @@ fn server_client_connection() {
 
         assert_eq!(server_handler.connection_calls, 1);
         assert_eq!(server_handler.connection_failed_calls, 0);
-        assert_eq!(server_handler.connection_congested_calls, 0);
+        assert_eq!(server_handler.connection_congestion_state_calls, 0);
         assert_eq!(server_handler.connection_packet_lost_calls, 0);
         assert_eq!(server_handler.connection_lost_calls, 0);
 
@@ -89,7 +89,7 @@ fn server_client_connection() {
 
     assert_eq!(client_handler.connection_calls, 1);
     assert_eq!(client_handler.connection_failed_calls, 0);
-    assert_eq!(client_handler.connection_congested_calls, 0);
+    assert_eq!(client_handler.connection_congestion_state_calls, 0);
     // This is somewhat random and depends on how excatly the two threads
     // interact
     // assert_eq!(client_handler.connection_packet_lost_calls, 0);
@@ -105,7 +105,7 @@ pub struct MockClientHandler {
 
     pub connection_calls: u32,
     pub connection_failed_calls: u32,
-    pub connection_congested_calls: u32,
+    pub connection_congestion_state_calls: u32,
     pub connection_packet_lost_calls: u32,
     pub connection_lost_calls: u32
 }
@@ -119,7 +119,7 @@ impl MockClientHandler {
 
             connection_calls: 0,
             connection_failed_calls: 0,
-            connection_congested_calls: 0,
+            connection_congestion_state_calls: 0,
             connection_packet_lost_calls: 0,
             connection_lost_calls: 0
         }
@@ -155,8 +155,8 @@ impl Handler<Client> for MockClientHandler {
         self.connection_packet_lost_calls += 1;
     }
 
-    fn connection_congested(&mut self, _: &mut Client, _: &mut Connection) {
-        self.connection_congested_calls += 1;
+    fn connection_congestion_state(&mut self, _: &mut Client, _: &mut Connection, _: bool) {
+        self.connection_congestion_state_calls += 1;
     }
 
     fn connection_lost(&mut self, client: &mut Client, _: &mut Connection) {
@@ -178,7 +178,7 @@ pub struct MockServerHandler {
 
     pub connection_calls: u32,
     pub connection_failed_calls: u32,
-    pub connection_congested_calls: u32,
+    pub connection_congestion_state_calls: u32,
     pub connection_packet_lost_calls: u32,
     pub connection_lost_calls: u32
 }
@@ -194,7 +194,7 @@ impl MockServerHandler {
 
             connection_calls: 0,
             connection_failed_calls: 0,
-            connection_congested_calls: 0,
+            connection_congestion_state_calls: 0,
             connection_packet_lost_calls: 0,
             connection_lost_calls: 0
         }
@@ -238,8 +238,8 @@ impl Handler<Server> for MockServerHandler {
         self.connection_packet_lost_calls += 1;
     }
 
-    fn connection_congested(&mut self, _: &mut Server, _: &mut Connection) {
-        self.connection_congested_calls += 1;
+    fn connection_congestion_state(&mut self, _: &mut Server, _: &mut Connection, _: bool) {
+        self.connection_congestion_state_calls += 1;
     }
 
     fn connection_lost(&mut self, _: &mut Server, _: &mut Connection) {

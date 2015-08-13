@@ -1,8 +1,17 @@
 use std::collections::HashMap;
-use shared::{Connection, ConnectionID};
+use shared::{BinaryRateLimiter, Connection, ConnectionID, Config};
+use shared::traits::RateLimiter;
 
 /// Trait for implementation of client / server event handling.
 pub trait Handler<T> {
+
+    // Factories
+
+    /// A method that returns a new `RateLimiter` instance for use with a
+    /// freshly instanciated `Connection`.
+    fn rate_limiter(&self, config: &Config) -> Box<RateLimiter> {
+        BinaryRateLimiter::new(config)
+    }
 
     // Server only
 
@@ -57,7 +66,7 @@ pub trait Handler<T> {
 
     /// Method that is called each time the congestion state of connection
     /// changes.
-    fn connection_congested(&mut self, _: &mut T, _: &mut Connection) {
+    fn connection_congestion_state(&mut self, _: &mut T, _: &mut Connection, _: bool) {
     }
 
     /// Method that is called each time a connection is lost and dropped.

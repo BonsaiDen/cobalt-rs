@@ -8,11 +8,6 @@ messages, too.
 - [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt)
 
 
-## TODO
-
-- Move out logic for congestion detection / avoidance into a trait so there can be different / multiple / user-defined implementation.
-
-
 ## Usage
 
 Add this to your `Cargo.toml`:
