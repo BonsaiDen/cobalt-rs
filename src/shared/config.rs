@@ -1,4 +1,4 @@
-/// A generic configuration object.
+/// Structure defining connection and message configuration options.
 #[derive(Copy, Clone)]
 pub struct Config {
 
@@ -13,8 +13,8 @@ pub struct Config {
     /// `[1, 2, 3, 4]`.
     pub protocol_header: [u8; 4],
 
-    /// Maximum RTT in milliseconds before a packet is considered lost. Default
-    /// is `1000`.
+    /// Maximum roundtrip-time in milliseconds before a packet is considered
+    /// lost. Default is `1000`.
     pub packet_drop_threshold: u32,
 
     /// Maximum time in milliseconds until the first packet must be received

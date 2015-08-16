@@ -2,9 +2,9 @@ use std::thread;
 use std::io::Error;
 use std::net;
 use std::sync::mpsc::{channel, Sender};
-use shared::traits::{Socket, SocketReader};
+use super::super::traits::socket::{Socket, SocketReader};
 
-/// A Non-blocking abstraction over a UDP socket.
+/// Non-blocking abstraction over a UDP socket.
 ///
 /// The non-blocking behavior is implement using a thread internally.
 ///

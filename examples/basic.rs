@@ -3,10 +3,7 @@ extern crate cobalt;
 use std::env;
 use std::str;
 use std::collections::HashMap;
-use cobalt::client::Client;
-use cobalt::server::Server;
-use cobalt::shared::{Config, Connection, ConnectionID, MessageKind};
-use cobalt::shared::traits::Handler;
+use cobalt::{Client, Config, Connection, ConnectionID, MessageKind, Handler, Server};
 
 struct ServerHandler;
 impl Handler<Server> for ServerHandler {

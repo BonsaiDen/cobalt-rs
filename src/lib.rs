@@ -1,13 +1,9 @@
-//! The main crate for cobalt.
-//!
-//! ## Overview
-//!
 //! **cobalt** is a networking library which provides [virtual connections
 //! over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/)
-//! and provides a messaging layer for sending both unreliable as well as
-//! reliable and optionally ordered messages.
+//! and along with a messaging layer for sending both unreliable, reliable and
+//! ordered messages.
 //!
-//! It is primarily designed to be used as the basis for realtime, latency
+//! It is primarily designed to be used as the basis for real-time, latency
 //! limited, multi client systems such as fast paced action games.
 //!
 //! The library provides the underlying architecture required for handling and
@@ -25,25 +21,21 @@
 //! ## Basic Server Handler
 //!
 //! The basis of a system that uses **cobalt** is to implementing a so called
-//! `Handler`, which receives will hav its methods called for all kinds of
+//! `Handler`, which receives will have its methods called for all kinds of
 //! different server / client related events.
 //!
 //! Below is a very basic example implementation for a game server.
 //!
 //! ```
 //! use std::collections::HashMap;
-//! use cobalt::shared::{Connection, ConnectionID};
-//! use cobalt::shared::traits::Handler;
-//! use cobalt::server::Server;
+//! use cobalt::{Config, Connection, ConnectionID, Handler, Server};
 //!
-//! struct GameServer {
-//!     motd: String
-//! }
-//!
+//! struct GameServer;
 //! impl Handler<Server> for GameServer {
 //!
-//!     fn bind(&mut self, _: &mut Server) {
-//!         // Load level, connect to master server etc.
+//!     fn bind(&mut self, server: &mut Server) {
+//!         // Since this is a runnable doc, we'll just exit right away
+//!         server.shutdown();
 //!     }
 //!
 //!     fn tick_connections(
@@ -76,22 +68,25 @@
 //!     }
 //!
 //! }
+//!
+//! let mut handler = GameServer;
+//! let mut server = Server::new(Config::default());
+//! server.bind(&mut handler, "127.0.0.1:7156").unwrap();
 //! ```
 //!
 //! And the client version would look almost identical except for a few methods
-//! having differnt names.
+//! having different names.
 //!
 //! ```
 //! use std::collections::HashMap;
-//! use cobalt::shared::Connection;
-//! use cobalt::shared::traits::Handler;
-//! use cobalt::client::Client;
+//! use cobalt::{Config, Connection, Handler, Client};
 //!
 //! struct GameClient;
 //! impl Handler<Client> for GameClient {
 //!
-//!     fn connect(&mut self, _: &mut Client) {
-//!         // Load game data etc.
+//!     fn connect(&mut self, client: &mut Client) {
+//!         // Since this is a runnable doc, we'll just exit right away
+//!         client.close();
 //!     }
 //!
 //!     fn tick_connection(&mut self, _: &mut Client, conn: &mut Connection) {
@@ -123,15 +118,51 @@
 //!     }
 //!
 //! }
+//!
+//! let mut handler = GameClient;
+//! let mut client = Client::new(Config::default());
+//! client.connect(&mut handler, "127.0.0.1:7156").unwrap();
 //! ```
 //!
 
-/// Connection and message handling.
-pub mod shared;
+mod client;
+mod server;
 
-/// A multi-client UDP server implementation.
-pub mod server;
+mod shared {
+    pub mod binary_rate_limiter;
+    pub mod config;
+    pub mod connection;
+    pub mod message_queue;
+    pub mod udp_socket;
+}
 
-/// A UDP client implementation.
-pub mod client;
+mod traits {
+    pub mod handler;
+    pub mod rate_limiter;
+    pub mod socket;
+}
+
+#[doc(inline)]
+pub use shared::config::Config;
+
+#[doc(inline)]
+pub use shared::connection::{Connection, ConnectionID, ConnectionState};
+
+#[doc(inline)]
+pub use shared::message_queue::MessageKind;
+
+#[doc(inline)]
+pub use shared::binary_rate_limiter::BinaryRateLimiter;
+
+#[doc(inline)]
+pub use traits::handler::Handler;
+
+#[doc(inline)]
+pub use traits::rate_limiter::RateLimiter;
+
+#[doc(inline)]
+pub use client::Client;
+
+#[doc(inline)]
+pub use server::Server;
 

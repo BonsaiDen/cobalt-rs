@@ -3,10 +3,7 @@ extern crate cobalt;
 use std::net;
 use std::thread;
 use std::collections::HashMap;
-use cobalt::client::Client;
-use cobalt::server::Server;
-use cobalt::shared::{Connection, ConnectionID, Config};
-use cobalt::shared::traits::Handler;
+use cobalt::{Client, Connection, ConnectionID, Config, Handler, Server};
 
 #[test]
 fn client_connection_failure() {

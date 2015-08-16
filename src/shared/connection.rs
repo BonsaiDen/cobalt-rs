@@ -4,9 +4,9 @@ extern crate clock_ticks;
 use std::cmp;
 use std::net::SocketAddr;
 use std::collections::VecDeque;
-use shared::{Config, MessageKind, MessageQueue};
-use shared::traits::{Handler, RateLimiter, Socket};
-use super::message_queue::MessageIterator;
+use super::message_queue::{MessageQueue, MessageIterator};
+use super::super::traits::socket::Socket;
+use super::super::{Config, MessageKind, Handler, RateLimiter};
 
 /// Maximum number of acknowledgement bits available in the packet header.
 const MAX_ACK_BITS: u32 = 32;
@@ -14,11 +14,27 @@ const MAX_ACK_BITS: u32 = 32;
 /// Maximum packet sequence number before wrap around happens.
 const MAX_SEQ_NUMBER: u32 = 256;
 
-/// Number of bytes used by the protocol header data.
-const HEADER_BYTES: usize = 14;
+/// Number of bytes used by a packet header.
+const PACKET_HEADER_SIZE: usize = 14;
 
-/// A value indicating the current state of a connection.
-#[derive(Debug, PartialEq, Copy, Clone)]
+/// Enum indicating the state of a `SentPacketAck`.
+#[derive(PartialEq)]
+enum PacketState {
+    Unknown,
+    Acked,
+    Lost
+}
+
+/// Structure used for packet acknowledgment of sent packets.
+struct SentPacketAck {
+    seq: u32,
+    time: u32,
+    state: PacketState,
+    packet: Option<Vec<u8>>
+}
+
+/// Enum indicating the state of a connection.
+#[derive(PartialEq, Copy, Clone)]
 pub enum ConnectionState {
 
     /// The connection has been opened but has yet to receive the first
@@ -42,25 +58,16 @@ pub enum ConnectionState {
 
 }
 
-/// A struct used for packet acknowledgment of sent packets.
-struct SentPacketAck {
-    seq: u32,
-    time: u32,
-    acked: bool,
-    lost: bool,
-    packet: Option<Vec<u8>>
-}
-
-/// The Connection ID type.
+/// Representation of a random id for connection identification.
 ///
 /// Used to uniquely\* identify the reliable connections. The id is send with
 /// every packet and is especially helpful in the case of NAT re-assigning
 /// local UDP ports which would make a address based identification unreliable.
 ///
-/// > \* The id is a `32` bit random integer; thus, in theory, there is a
-/// > potential for two clients using the same id, in which case both will have
-/// > their connections dropped very shortly because of data mismatch.
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+/// > \* Since the id is random integer, there is of course a very small chance
+/// > for two clients to end up using the same id, in that case - due to
+/// conflicting ack sequences and message data - both will get dropped shortly.
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
 pub struct ConnectionID(pub u32);
 
 /// Implementation of reliable UDP based messaging protocol.
@@ -90,10 +97,10 @@ pub struct Connection {
     /// Last time a packet was received
     last_receive_time: u32,
 
-    /// A queue of recently received packets used for ack bitfield construction
+    /// Queue of recently received packets used for ack bitfield construction
     recv_ack_queue: VecDeque<u32>,
 
-    /// A queue of recently send packets pending acknowledgment
+    /// Queue of recently send packets pending acknowledgment
     sent_ack_queue: Vec<SentPacketAck>,
 
     /// Number of all packets sent over the connection
@@ -124,14 +131,14 @@ impl Connection {
     ///
     /// ```
     /// use std::net::SocketAddr;
-    /// use cobalt::shared::{BinaryRateLimiter, Connection, ConnectionState, Config};
+    /// use cobalt::{BinaryRateLimiter, Connection, ConnectionState, Config};
     ///
     /// let config = Config::default();
     /// let address: SocketAddr = "127.0.0.1:0".parse().unwrap();
     /// let limiter = BinaryRateLimiter::new(&config);
     /// let conn = Connection::new(config, address, limiter);
     ///
-    /// assert_eq!(conn.state(), ConnectionState::Connecting);
+    /// assert!(conn.state() == ConnectionState::Connecting);
     /// assert_eq!(conn.open(), true);
     /// ```
     pub fn new(
@@ -163,7 +170,7 @@ impl Connection {
     /// # Examples
     ///
     /// ```
-    /// use cobalt::shared::{Connection, ConnectionID, Config};
+    /// use cobalt::{Connection, ConnectionID, Config};
     ///
     /// let config = Config {
     ///     protocol_header: [11, 22, 33, 44],
@@ -180,7 +187,7 @@ impl Connection {
     ///
     /// let conn_id = Connection::id_from_packet(&config, &packet);
     ///
-    /// assert_eq!(conn_id, Some(ConnectionID(16909060)));
+    /// assert!(conn_id == Some(ConnectionID(16909060)));
     /// ```
     pub fn id_from_packet(config: &Config, packet: &[u8]) -> Option<ConnectionID> {
         if &packet[0..4] == &config.protocol_header {
@@ -229,8 +236,7 @@ impl Connection {
     /// over the total number of packets that have been send across the
     /// connection.
     pub fn packet_loss(&self) -> f32 {
-        100.0 / cmp::max(self.sent_packets, 1) as f32
-                           * self.lost_packets as f32
+        100.0 / cmp::max(self.sent_packets, 1) as f32 * self.lost_packets as f32
     }
 
     /// Returns the socket address of the remote peer of this connection.
@@ -263,9 +269,13 @@ impl Connection {
         &mut self, packet: Vec<u8>, owner: &mut T, handler: &mut Handler<T>
     ) {
 
+        // Ignore any packets shorter then the header length
+        if packet.len() < PACKET_HEADER_SIZE {
+            return;
+
         // Update connection state
-        if self.update_receive_state(&packet, owner, handler) == false {
-            return
+        } else if self.update_receive_state(&packet, owner, handler) == false {
+            return;
         }
 
         // Update time used for disconnect detection
@@ -283,42 +293,49 @@ impl Connection {
                      | (packet[12] as u32) << 8
                      |  packet[13] as u32;
 
-        // Check most recently send packets for their acknowledgment
-        let mut lost_packets = Vec::new();
-        for p in self.sent_ack_queue.iter_mut() {
+        // Check recently send packets for their acknowledgment
+        for i in 0..self.sent_ack_queue.len() {
 
-            // Check if we have received a ack for the packet
-            let acked = seq_was_acked(p.seq, ack_seq_number, bitfield);
+            if let Some(lost_packet) = {
 
-            // Calculate the RTT from acknowledged packets
-            if acked {
-                // TODO refactor
-                self.smoothed_rtt = (self.smoothed_rtt - (self.smoothed_rtt - (self.last_receive_time - p.time) as f32) * 0.10).max(0.0);
-                self.acked_packets += 1;
-                p.acked = true;
+                let ack = self.sent_ack_queue.get_mut(i).unwrap();
 
-            // Detect any lost packets
-            } else if self.last_receive_time - p.time
-                    > self.config.packet_drop_threshold {
+                // Calculate the roundtrip time from acknowledged packets
+                if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
+                    self.acked_packets += 1;
+                    self.smoothed_rtt = moving_average(
+                        self.smoothed_rtt,
+                        (self.last_receive_time - ack.time) as f32
+                    );
+                    ack.state = PacketState::Acked;
+                    None
 
-                lost_packets.push(p.packet.take().unwrap());
-                self.lost_packets += 1;
-                p.lost = true;
+                // Extract data from lost packets
+                } else if self.last_receive_time - ack.time
+                        > self.config.packet_drop_threshold {
+
+                    self.lost_packets += 1;
+                    ack.state = PacketState::Lost;
+                    ack.packet.take()
+
+                // Keep all pending packets
+                } else {
+                    None
+                }
+
+            // Push messages from lost packets into the queue and notify the handler
+            } {
+                self.message_queue.lost_packet(&lost_packet[PACKET_HEADER_SIZE..]);
+                handler.connection_packet_lost(owner, self, &lost_packet[PACKET_HEADER_SIZE..]);
             }
 
         }
 
         // Push packet data into message queue
-        self.message_queue.receive_packet(&packet[HEADER_BYTES..]);
+        self.message_queue.receive_packet(&packet[PACKET_HEADER_SIZE..]);
 
-        // Notify handler of lost packets
-        for packet in lost_packets {
-            self.message_queue.lost_packet(&packet[HEADER_BYTES..]);
-            handler.connection_packet_lost(owner, self, &packet[HEADER_BYTES..]);
-        }
-
-        // Remove acked / lost packets from the queue
-        self.sent_ack_queue.retain(|p| !(p.lost || p.acked));
+        // Remove all acknowledged and lost packets from the sent ack queue
+        self.sent_ack_queue.retain(|p| p.state == PacketState::Unknown);
 
         // Insert packet into receive acknowledgment queue
         self.recv_ack_queue.push_front(self.remote_seq_number);
@@ -363,7 +380,7 @@ impl Connection {
         }
 
         // Take write buffer out and insert a fresh, empty one in its place
-        let mut packet = Vec::<u8>::with_capacity(HEADER_BYTES);
+        let mut packet = Vec::<u8>::with_capacity(PACKET_HEADER_SIZE);
 
         // Set packet protocol header
         packet.push(self.config.protocol_header[0]);
@@ -410,7 +427,7 @@ impl Connection {
 
         // Write messages from queue into the packet
         self.message_queue.send_packet(
-            &mut packet, self.config.packet_max_size - HEADER_BYTES
+            &mut packet, self.config.packet_max_size - PACKET_HEADER_SIZE
         );
 
         // Send packet to socket
@@ -421,8 +438,7 @@ impl Connection {
             self.sent_ack_queue.push(SentPacketAck {
                 seq: self.local_seq_number,
                 time: precise_time_ms(),
-                acked: false,
-                lost: false,
+                state: PacketState::Unknown,
                 packet: Some(packet)
             });
         }
@@ -558,6 +574,11 @@ impl Connection {
 }
 
 // Static Helpers -------------------------------------------------------------
+fn moving_average(a: f32, b: f32) -> f32 {
+    (a - (a - b) * 0.10).max(0.0)
+}
+
+
 fn seq_bit_index(seq: u32, ack: u32) -> u32 {
     if seq > ack {
         ack + (MAX_SEQ_NUMBER - 1 - seq)
@@ -591,11 +612,19 @@ fn precise_time_ms() -> u32 {
 mod tests {
 
     use std::net;
+    use std::thread;
     use std::io::Error;
     use std::sync::mpsc::channel;
 
-    use shared::{BinaryRateLimiter, Connection, ConnectionState, Config, MessageKind};
-    use shared::traits::{Handler, Socket, SocketReader};
+    use super::super::super::traits::socket::{Socket, SocketReader};
+    use super::super::super::{
+            BinaryRateLimiter,
+            Connection,
+            ConnectionState,
+            Config,
+            MessageKind,
+            Handler
+    };
 
     fn connection() -> Connection {
         let config = Config::default();
@@ -609,7 +638,7 @@ mod tests {
         let conn = connection();
         assert_eq!(conn.open(), true);
         assert_eq!(conn.congested(), false);
-        assert_eq!(conn.state(), ConnectionState::Connecting);
+        assert!(conn.state() == ConnectionState::Connecting);
         assert_eq!(conn.rtt(), 0);
         assert_eq!(conn.packet_loss(), 0.0);
     }
@@ -619,7 +648,7 @@ mod tests {
         let mut conn = connection();
         conn.close();
         assert_eq!(conn.open(), false);
-        assert_eq!(conn.state(), ConnectionState::Closed);
+        assert!(conn.state() == ConnectionState::Closed);
     }
 
     #[test]
@@ -628,7 +657,7 @@ mod tests {
         conn.close();
         conn.reset();
         assert_eq!(conn.open(), true);
-        assert_eq!(conn.state(), ConnectionState::Connecting);
+        assert!(conn.state() == ConnectionState::Connecting);
     }
 
     #[test]
@@ -860,7 +889,7 @@ mod tests {
         conn.send(MessageKind::Ordered, b"World".to_vec());
         conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
 
-        // Test Message Receival
+        // Test Message Receiving
         conn.receive_packet([
             1, 2, 3, 4,
             0, 0, 0, 0,
@@ -877,7 +906,7 @@ mod tests {
             // Test
             1, 0, 0, 4, 84, 101, 115, 116,
 
-            // We actually test inverse receival order here!
+            // We actually test inverse receiving order here!
 
             // World
             2, 1, 0, 5, 87, 111, 114, 108, 100,
@@ -900,6 +929,203 @@ mod tests {
             b"Hello".to_vec(),
             b"World".to_vec()
         ]);
+
+    }
+
+    #[test]
+    fn test_receive_invalid_packets() {
+
+        let mut conn = connection();
+        let mut owner = MockOwner;
+        let mut handler = MockOwnerHandler;
+
+        // Empty packet
+        conn.receive_packet([].to_vec(), &mut owner, &mut handler);
+
+        // Garbage packet
+        conn.receive_packet([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
+
+        ].to_vec(), &mut owner, &mut handler);
+
+    }
+
+    #[test]
+    fn test_rtt() {
+
+        let mut conn = connection();
+        let address = conn.peer_addr();
+        let mut owner = MockOwner;
+        let mut handler = MockOwnerHandler;
+
+        let mut socket = MockSocket::new(vec![
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                0,
+                0,
+                0, 0, 0, 0
+            ].to_vec(),
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                1,
+                0,
+                0, 0, 0, 0
+            ].to_vec()
+        ]);
+
+        assert_eq!(conn.rtt(), 0);
+
+        // First packet
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+        thread::sleep_ms(100);
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            0,
+            0, // confirm the packet above
+            0, 0,
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
+        // Expect RTT value to have moved by 10% of the overall roundtrip time
+        assert!(conn.rtt() >= 10);
+
+        // Second packet
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            1,
+            1, // confirm the packet above
+            0, 0,
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
+        // Expect RTT to have reduced by 10%
+        assert!(conn.rtt() <= 10);
+
+    }
+
+    #[test]
+    fn test_packet_loss() {
+
+        struct PacketLossHandler;
+        impl Handler<MockOwner> for PacketLossHandler {
+
+            fn connection_packet_lost(
+                &mut self, _: &mut MockOwner, _: &mut Connection, packet: &[u8]
+            ) {
+                assert_eq!([
+                    0, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 73, 110, 115, 116, 97, 110, 116,
+                    1, 0, 0, 15, 80, 97, 99, 107, 101, 116, 32, 82, 101, 108, 105, 97, 98, 108, 101,
+                    2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
+                ].to_vec(), packet);
+            }
+
+        }
+
+        let config = Config {
+            // set a low threshold for packet loss
+            packet_drop_threshold: 10,
+            .. Config::default()
+        };
+
+        let address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
+        let limiter = BinaryRateLimiter::new(&config);
+        let mut conn = Connection::new(config, address, limiter);
+        let mut owner = MockOwner;
+        let mut handler = PacketLossHandler;
+
+        let mut socket = MockSocket::new(vec![
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                0,
+                0,
+                0, 0, 0, 0,
+
+                // Packet 1
+                0, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 73, 110, 115, 116, 97, 110, 116,
+
+                // Packet 2
+                1, 0, 0, 15, 80, 97, 99, 107, 101, 116, 32, 82, 101, 108, 105, 97, 98, 108, 101,
+
+                // Packet 3
+                2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
+
+            ].to_vec(),
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                1,
+                0,
+                0, 0, 0, 0,
+
+                // Packet 2
+                1, 0, 0, 15, 80, 97, 99, 107, 101, 116, 32, 82, 101, 108, 105, 97, 98, 108, 101,
+
+                // Packet 3
+                2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
+
+            ].to_vec()
+        ]);
+
+        conn.send(MessageKind::Instant, b"Packet Instant".to_vec());
+        conn.send(MessageKind::Reliable, b"Packet Reliable".to_vec());
+        conn.send(MessageKind::Ordered, b"Packet Ordered".to_vec());
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+
+        assert_eq!(conn.packet_loss(), 0.0);
+
+        // Wait a bit so the packets will definitely get dropped
+        thread::sleep_ms(20);
+
+        // Now receive a packet and check for the lost packets
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            0, 2, 0, 0, // Set ack seq to non-0 so we trigger the packet loss
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
+        // RTT should be left untouched the lost packet
+        assert_eq!(conn.rtt(), 0);
+
+        // But packet loss should spike up
+        assert_eq!(conn.packet_loss(), 100.0);
+
+        // The messages from the lost packet should have been re-inserted into
+        // the message_queue and should be send again with the next packet.
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+
+        // Fully receive the next packet
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
+        // But packet loss should now go down
+        assert_eq!(conn.packet_loss(), 50.0);
 
     }
 

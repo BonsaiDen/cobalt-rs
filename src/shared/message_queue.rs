@@ -1,6 +1,6 @@
 use std::cmp;
 use std::collections::{VecDeque, BinaryHeap};
-use shared::Config;
+use super::super::Config;
 
 /// Maximum message ordering id before wrap around happens.
 const MAX_ORDER_ID: u16 = 4096;
@@ -8,35 +8,35 @@ const MAX_ORDER_ID: u16 = 4096;
 /// Number of bytes used in a single message header.
 const MESSAGE_HEADER_BYTES: usize = 4;
 
-/// Enum determing the way messages are send and received over connections.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+/// Enum for specification of a message handling algorithm.
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum MessageKind {
-    /// A message that is going be send exactly once and ingored in case its
+    /// Message that is going be send exactly once and ignored in case its
     /// containing packet is lost. No guarantees are made as for the order in
     /// which a message of this kind is going to be received by a remote queue.
     Instant = 0,
 
-    /// A message that is going to be re-send in case its containing packet is
+    /// Message that is going to be re-send in case its containing packet is
     /// lost. No guarantees are made as for the order in which a message of
     /// this kind is going to be received by a remote queue.
     Reliable = 1,
 
-    /// A message that is going to be re-send in case its containing packet is
-    /// lost and is also guaranteed to arive in-order, meaning that if you send
+    /// Message that is going to be re-send in case its containing packet is
+    /// lost and is also guaranteed to arrive in-order, meaning that if you send
     /// two `Ordered` messages and the second arrives first in the remote queue
     /// , the remote queue will buffer the second message until the first one
-    /// arrives and then make both of them avaialable to the application at
+    /// arrives and then make both of them available to the application at
     /// once.
     Ordered = 2,
 
-    /// A invalid message which for some reason could not be parsed correctly
-    /// from a packets data.
+    /// Invalid message which for some reason could not be parsed correctly
+    /// from the available packet data.
     Invalid = 3
 }
 
-/// A struct for handling messages inside a `MessageQueue` with support for
+/// Structure for handling messages inside a `MessageQueue` with support for
 /// insertion into a binary min heap for order checking on received messages.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 struct Message {
     kind: MessageKind,
     order: u16,
@@ -58,7 +58,7 @@ impl PartialOrd for Message {
     }
 }
 
-/// A consuming iterator over the received messages in a `MessageQueue`.
+/// Consuming iterator over the received messages in a `MessageQueue`.
 pub struct MessageIterator<'a> {
     messages: &'a mut VecDeque<Message>
 }
@@ -76,7 +76,7 @@ impl<'a> Iterator for MessageIterator<'a> {
 
 }
 
-/// A queue that manages the sending and receival of both reliable and
+/// Queue that manages the sending and receiving of both reliable and
 /// unreliable message types and also supports in order transmission of
 /// messages.
 pub struct MessageQueue {
@@ -101,28 +101,16 @@ pub struct MessageQueue {
     /// Queue of outgoing messages of the kind `MessageKind::Ordered`
     o_queue: VecDeque<Message>,
 
-    /// A ordered queue of incoming messages
+    /// Ordered queue of incoming messages
     recv_queue: VecDeque<Message>,
 
-    /// A binary min heap to manage incomging, out of order messages
+    /// Binary Min-Heap to manage incomging, out of order messages
     o_recv_heap: BinaryHeap<Message>
 }
 
 impl MessageQueue {
 
     /// Creates a new queue for sending and receiving messages.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use cobalt::shared::{Config, MessageKind, MessageQueue};
-    ///
-    /// let mut q = MessageQueue::new(Config::default());
-    /// q.send(MessageKind::Instant, b"I may get lost...".to_vec());
-    /// q.send(MessageKind::Reliable, b"I'm getting there eventually".to_vec());
-    /// q.send(MessageKind::Ordered, b"I'll always come before #2".to_vec());
-    /// q.send(MessageKind::Ordered, b"#2".to_vec());
-    /// ```
     pub fn new(config: Config) -> MessageQueue {
         MessageQueue {
             config: config,
@@ -136,7 +124,7 @@ impl MessageQueue {
         }
     }
 
-    /// Returns a consuming iterator over all recevied messages in the queue.
+    /// Returns a consuming iterator over all received messages in the queue.
     pub fn received(&mut self) -> MessageIterator {
         MessageIterator { messages: &mut self.recv_queue }
     }
@@ -429,7 +417,7 @@ fn write_message(
 #[cfg(test)]
 mod tests {
 
-    use shared::Config;
+    use super::super::super::Config;
     use super::{MessageKind, MessageQueue};
 
     fn messages(q: &mut MessageQueue) -> Vec<Vec<u8>> {

@@ -2,7 +2,7 @@ use std::io::Error;
 use std::net;
 use std::sync::mpsc::Receiver;
 
-/// A channel receiver for UDP packets.
+/// Asynchronous `Receiver` for UDP packets.
 pub type SocketReader = Receiver<(net::SocketAddr, Vec<u8>)>;
 
 /// Trait that defines a non-blocking abstraction over a UDP socket.

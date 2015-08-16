@@ -1,15 +1,14 @@
 use std::collections::HashMap;
-use shared::{BinaryRateLimiter, Connection, ConnectionID, Config};
-use shared::traits::RateLimiter;
+use super::super::{BinaryRateLimiter, Connection, ConnectionID, Config};
 
 /// Trait for implementation of client / server event handling.
 pub trait Handler<T> {
 
     // Factories
 
-    /// A method that returns a new `RateLimiter` instance for use with a
-    /// freshly instanciated `Connection`.
-    fn rate_limiter(&self, config: &Config) -> Box<RateLimiter> {
+    /// Method that returns a new `RateLimiter` instance for use with a
+    /// freshly instantiated `Connection`.
+    fn rate_limiter(&self, config: &Config) -> Box<BinaryRateLimiter> {
         BinaryRateLimiter::new(config)
     }
 
@@ -27,7 +26,7 @@ pub trait Handler<T> {
     ) {
     }
 
-    /// A method that is called once a `Server` is going to shutdown.
+    /// Method that is called once a `Server` is going to shutdown.
     fn shutdown(&mut self, _: &mut T) {
     }
 

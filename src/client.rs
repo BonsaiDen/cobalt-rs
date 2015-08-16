@@ -1,11 +1,12 @@
 use std::thread;
 use std::io::Error;
 use std::net::{SocketAddr, ToSocketAddrs};
-use shared::{Config, Connection, UdpSocket};
-use shared::traits::{Handler, Socket};
+use traits::socket::Socket;
+use shared::udp_socket::UdpSocket;
+use super::{Config, Connection, Handler};
 
-/// A server client that uses a virtual UDP connection for reliable message
-/// transmission.
+/// Implementation of a single-server client implementation with handler based
+/// event dispatching.
 pub struct Client {
     closed: bool,
     config: Config,

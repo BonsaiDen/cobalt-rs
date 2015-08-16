@@ -2,11 +2,12 @@ use std::thread;
 use std::io::Error;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::HashMap;
-use shared::{Config, Connection, ConnectionID, UdpSocket};
-use shared::traits::{Socket, Handler};
+use traits::socket::Socket;
+use shared::udp_socket::UdpSocket;
+use super::{Config, Connection, ConnectionID, Handler};
 
-/// A multi-client server that uses a virtual UDP connection for reliable
-/// message transmission.
+/// Implementation of a multi-client server implementation with handler based
+/// event dispatching.
 pub struct Server {
     closed: bool,
     config: Config,
@@ -130,12 +131,16 @@ impl Server {
             }
 
             // Remove any dropped connections and their address mappings
-            for id in dropped.iter() {
-                connections.remove(id).unwrap().reset();
-                addresses.remove(id).unwrap();
-            }
+            if dropped.is_empty() == false {
 
-            dropped.clear();
+                for id in dropped.iter() {
+                    connections.remove(id).unwrap().reset();
+                    addresses.remove(id).unwrap();
+                }
+
+                dropped.clear();
+
+            }
 
             // Next Tick
             thread::sleep_ms(1000 / self.config.send_rate);

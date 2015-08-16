@@ -1,8 +1,7 @@
 extern crate clock_ticks;
 
 use std::cmp;
-use shared::Config;
-use shared::traits::RateLimiter;
+use super::super::{Config, RateLimiter};
 
 /// Minimum time before switching back into good mode in milliseconds.
 const MIN_GOOD_MODE_TIME_DELAY: u32 = 1000;
@@ -16,9 +15,9 @@ enum Mode {
     Bad
 }
 
-/// A basic, binary state rate limiter for congestion avoidance.
+/// Implementation of a binary state rate limiter for congestion avoidance.
 ///
-/// It is based on the design layed out in the following article:
+/// It is based on the example design from the following article:
 /// http://gafferongames.com/networking-for-game-programmers/reliability-and-flow-control/
 pub struct BinaryRateLimiter {
     tick: u32,
