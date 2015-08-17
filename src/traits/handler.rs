@@ -1,5 +1,7 @@
 use std::collections::HashMap;
-use super::super::{BinaryRateLimiter, Connection, ConnectionID, Config};
+use super::super::{
+    BinaryRateLimiter, Connection, ConnectionID, Config, RateLimiter
+};
 
 /// Trait for implementation of client / server event handling.
 pub trait Handler<T> {
@@ -8,7 +10,7 @@ pub trait Handler<T> {
 
     /// Method that returns a new `RateLimiter` instance for use with a
     /// freshly instantiated `Connection`.
-    fn rate_limiter(&self, config: &Config) -> Box<BinaryRateLimiter> {
+    fn rate_limiter(&self, config: &Config) -> Box<RateLimiter> {
         BinaryRateLimiter::new(config)
     }
 
