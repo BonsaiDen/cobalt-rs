@@ -69,7 +69,7 @@ impl Server {
 
             // Get current time to correct tick delay in order to achieve
             // a more stable tick rate
-            let iteration_start = precise_time_ms();
+            let begin = clock_ticks::precise_time_ns();
 
             // Receive all incoming UDP packets to our local address
             while let Ok((addr, packet)) = reader.try_recv() {
@@ -151,9 +151,9 @@ impl Server {
 
             // Calculate spend time in current loop iteration and limit ticks
             // accordingly
-            let spend = precise_time_ms() - iteration_start;
+            let spend = (clock_ticks::precise_time_ns() - begin) / 1000000 ;
             thread::sleep_ms(
-                cmp::max(1000 / self.config.send_rate - spend, 0)
+                cmp::max(1000 / self.config.send_rate - spend as u32, 0)
             );
 
         }
@@ -179,10 +179,6 @@ impl Server {
         self.closed = true;
     }
 
-}
-
-fn precise_time_ms() -> u32 {
-    (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 
 
