@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use cobalt::{Client, Connection, ConnectionID, Config, Handler, Server};
 
 #[test]
-fn client_connection_failure() {
+fn test_client_connection_failure() {
 
     let config = Config::default();
     let mut handler = MockClientHandler::new();
@@ -26,7 +26,7 @@ fn client_connection_failure() {
 }
 
 #[test]
-fn server_bind_and_shutdown() {
+fn test_server_bind_and_shutdown() {
 
     let config = Config::default();
     let mut handler = MockServerHandler::new(0);
@@ -46,7 +46,7 @@ fn server_bind_and_shutdown() {
 }
 
 #[test]
-fn server_client_connection() {
+fn test_server_client_connection() {
 
     // Get a free local socket and then drop it for quick re-use
     // this is note 100% safe but we cannot easily get the locally bound server
