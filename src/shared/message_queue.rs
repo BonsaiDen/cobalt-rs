@@ -1,5 +1,5 @@
 use std::cmp;
-use std::collections::{VecDeque, BinaryHeap};
+use std::collections::{BinaryHeap, HashSet, VecDeque};
 use super::super::Config;
 
 /// Maximum message ordering id before wrap around happens.
@@ -58,7 +58,7 @@ impl PartialOrd for Message {
     }
 }
 
-/// Consuming iterator over the received messages in a `MessageQueue`.
+/// Consuming iterator over the received messages of a `MessageQueue`.
 pub struct MessageIterator<'a> {
     messages: &'a mut VecDeque<Message>
 }
@@ -105,7 +105,11 @@ pub struct MessageQueue {
     recv_queue: VecDeque<Message>,
 
     /// Binary Min-Heap to manage incomging, out of order messages
-    o_recv_heap: BinaryHeap<Message>
+    o_recv_heap: BinaryHeap<Message>,
+
+    /// Set for avoiding duplication of out of order messages
+    o_recv_set: HashSet<u16>
+
 }
 
 impl MessageQueue {
@@ -120,7 +124,8 @@ impl MessageQueue {
             r_queue: VecDeque::new(),
             o_queue: VecDeque::new(),
             recv_queue: VecDeque::new(),
-            o_recv_heap: BinaryHeap::new()
+            o_recv_heap: BinaryHeap::new(),
+            o_recv_set: HashSet::new()
         }
     }
 
@@ -248,7 +253,8 @@ impl MessageQueue {
         self.r_queue.clear();
         self.o_queue.clear();
         self.recv_queue.clear();
-        self.o_recv_heap.clear()
+        self.o_recv_heap.clear();
+        self.o_recv_set.clear();
     }
 
     // Internal Message Handling ----------------------------------------------
@@ -260,8 +266,8 @@ impl MessageQueue {
 
             // Received the message in order
             self.recv_queue.push_back(m);
-            self.remote_order_id += 1;
 
+            self.remote_order_id += 1;
             if self.remote_order_id == MAX_ORDER_ID {
                 self.remote_order_id = 0;
             }
@@ -271,6 +277,8 @@ impl MessageQueue {
             // order
             let mut matches = true;
             while matches {
+
+                // TODO refactor
 
                 // Check if the order id of the minimal item in the heap
                 // matches the expected next remote order id
@@ -284,11 +292,14 @@ impl MessageQueue {
                 // We found another message, matching the next expected order id
                 if matches {
 
-                    // Remove it from the heap and push it into the recv queue
-                    let msg = self.o_recv_heap.pop();
-                    self.recv_queue.push_back(msg.unwrap());
-                    self.remote_order_id += 1;
+                    // Unset duplication marker
+                    self.o_recv_set.remove(&self.remote_order_id);
 
+                    // Remove it from the heap and push it into the recv queue
+                    let msg = self.o_recv_heap.pop().unwrap();
+                    self.recv_queue.push_back(msg);
+
+                    self.remote_order_id += 1;
                     if self.remote_order_id == MAX_ORDER_ID {
                         self.remote_order_id = 0;
                     }
@@ -302,10 +313,14 @@ impl MessageQueue {
         // message out of order.
         } else if order_is_more_recent(m.order, self.remote_order_id) {
 
-            // Now before we insert the message into the min-heap, we check
-            // that it's not already contained, in order to avoid duplicates.
-            // TODO avoid duplication of inserts
-            self.o_recv_heap.push(m);
+            // Now, before we insert the message into the min-heap, we check
+            // that there's no other message with the same order id in the heap
+            // already. Duplicates would require additional peek / pop later on
+            // when removing messages from the heap, so we resort to a Set here.
+            if self.o_recv_set.contains(&m.order) == false {
+                self.o_recv_set.insert(m.order);
+                self.o_recv_heap.push(m);
+            }
 
         }
 
@@ -854,6 +869,44 @@ mod tests {
         q.send(MessageKind::Ordered, b"".to_vec());
         q.send_packet(&mut buffer, 64);
         assert_eq!(buffer, [2, 0, 0, 0].to_vec());
+    }
+
+    #[test]
+    fn test_in_order_duplicates() {
+
+        let mut q = MessageQueue::new(Config::default());
+
+        q.receive_packet(&[
+            2, 0, 0, 1, 53, // Expected #1
+            2, 1, 0, 1, 54, // Expected #2
+            2, 1, 0, 1, 55,
+            2, 1, 0, 1, 56,
+            2, 2, 0, 1, 57, // Expected #3
+            2, 2, 0, 1, 58,
+            2, 3, 0, 1, 59  // Expected #4
+        ]);
+
+        assert_eq!(messages(&mut q), [[53], [54], [57], [59]]);
+
+    }
+
+    #[test]
+    fn test_out_of_order_duplicates() {
+
+        let mut q = MessageQueue::new(Config::default());
+
+        q.receive_packet(&[
+            2, 0, 0, 1, 53, // Expected #1
+            2, 2, 0, 1, 54, // Expected #3
+            2, 2, 0, 1, 55,
+            2, 2, 0, 1, 56,
+            2, 1, 0, 1, 57, // Expected #2
+            2, 4, 0, 1, 58, // Expected #5
+            2, 3, 0, 1, 59  // Expected #4
+        ]);
+
+        assert_eq!(messages(&mut q), [[53], [57], [54], [59], [58]]);
+
     }
 
 }
