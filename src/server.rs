@@ -222,7 +222,7 @@ mod tests {
             }
 
             // Fake some load inside of the tick handler
-            thread::sleep_ms(50);
+            thread::sleep_ms(75);
 
         }
 
@@ -249,8 +249,7 @@ mod tests {
         let mut server = Server::new(config);
         server.bind(&mut handler, "127.0.0.1:0").unwrap();
 
-        //
-        assert!(handler.accumulated <= 310);
+        assert!(handler.accumulated <= 350);
 
     }
 

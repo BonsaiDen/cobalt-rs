@@ -978,6 +978,46 @@ mod tests {
                 1,
                 0,
                 0, 0, 0, 0
+            ].to_vec(),
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                2,
+                1,
+                0, 0, 0, 1
+            ].to_vec(),
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                3,
+                2,
+                0, 0, 0, 3
+            ].to_vec(),
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                4,
+                3,
+                0, 0, 0, 7
+            ].to_vec(),
+            [
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                5,
+                4,
+                0, 0, 0, 15
             ].to_vec()
         ]);
 
@@ -985,7 +1025,7 @@ mod tests {
 
         // First packet
         conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
-        thread::sleep_ms(100);
+        thread::sleep_ms(500);
         conn.receive_packet([
             1, 2, 3, 4,
             0, 0, 0, 0,
@@ -997,7 +1037,7 @@ mod tests {
         ].to_vec(), &mut owner, &mut handler);
 
         // Expect RTT value to have moved by 10% of the overall roundtrip time
-        assert!(conn.rtt() >= 10);
+        assert!(conn.rtt() >= 40);
 
         // Second packet
         conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
@@ -1011,8 +1051,56 @@ mod tests {
 
         ].to_vec(), &mut owner, &mut handler);
 
+        // Third packet
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            2,
+            2, // confirm the packet above
+            0, 0,
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
+        // Fourth packet
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            3,
+            3, // confirm the packet above
+            0, 0,
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
+        // Fifth packet
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            4,
+            4, // confirm the packet above
+            0, 0,
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
+        // Sixth packet
+        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            5,
+            5, // confirm the packet above
+            0, 0,
+            0, 0
+
+        ].to_vec(), &mut owner, &mut handler);
+
         // Expect RTT to have reduced by 10%
-        assert!(conn.rtt() <= 10);
+        assert!(conn.rtt() <= 40);
 
     }
 
