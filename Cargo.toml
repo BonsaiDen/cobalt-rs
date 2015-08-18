@@ -10,5 +10,6 @@ keywords = [ "virtual", "udp", "connection", "message", "queue"]
 license="MIT"
 
 [dependencies]
-clock_ticks = "*"
-rand = "*"
+clock_ticks = "~0.0.6"
+rand = "~0.3.10"
+
