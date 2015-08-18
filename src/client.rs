@@ -1,4 +1,7 @@
+extern crate clock_ticks;
+
 use std::thread;
+use std::cmp;
 use std::io::Error;
 use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
@@ -65,6 +68,10 @@ impl Client {
         // Receive and send until we get closed.
         while !self.closed {
 
+            // Get current time to correct tick delay in order to achieve
+            // a more stable tick rate
+            let iteration_start = precise_time_ms();
+
             // Receive all incoming UDP packets from the specified remote
             // address feeding them into out connection object for parsing
             while let Ok((addr, packet)) = reader.try_recv() {
@@ -80,7 +87,10 @@ impl Client {
             connection.send_packet(&mut socket, &peer_addr, self, handler);
 
             // Limit ticks per second to the configured amount
-            thread::sleep_ms(1000 / self.config.send_rate);
+            let spend = precise_time_ms() - iteration_start;
+            thread::sleep_ms(
+                cmp::max(1000 / self.config.send_rate - spend, 0)
+            );
 
         }
 
@@ -103,5 +113,9 @@ impl Client {
         self.closed = true;
     }
 
+}
+
+fn precise_time_ms() -> u32 {
+    (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 

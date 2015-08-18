@@ -1,4 +1,7 @@
+extern crate clock_ticks;
+
 use std::thread;
+use std::cmp;
 use std::io::Error;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::HashMap;
@@ -63,6 +66,10 @@ impl Server {
 
         // Receive and send until we shut down.
         while !self.closed {
+
+            // Get current time to correct tick delay in order to achieve
+            // a more stable tick rate
+            let iteration_start = precise_time_ms();
 
             // Receive all incoming UDP packets to our local address
             while let Ok((addr, packet)) = reader.try_recv() {
@@ -142,8 +149,12 @@ impl Server {
 
             }
 
-            // Next Tick
-            thread::sleep_ms(1000 / self.config.send_rate);
+            // Calculate spend time in current loop iteration and limit ticks
+            // accordingly
+            let spend = precise_time_ms() - iteration_start;
+            thread::sleep_ms(
+                cmp::max(1000 / self.config.send_rate - spend, 0)
+            );
 
         }
 
@@ -166,6 +177,85 @@ impl Server {
     /// Shuts down the server, closing all active connections.
     pub fn shutdown(&mut self) {
         self.closed = true;
+    }
+
+}
+
+fn precise_time_ms() -> u32 {
+    (clock_ticks::precise_time_ns() / 1000000) as u32
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    extern crate clock_ticks;
+
+    use std::thread;
+    use std::collections::HashMap;
+    use super::super::{Connection, ConnectionID, Config, Handler, Server};
+
+    struct MockServerHandler {
+        pub last_tick_time: u32,
+        pub tick_count: u32,
+        pub accumulated: u32
+    }
+
+    impl Handler<Server> for MockServerHandler {
+
+        fn bind(&mut self, _: &mut Server) {
+            self.last_tick_time = precise_time_ms();
+        }
+
+        fn tick_connections(
+            &mut self, server: &mut Server,
+            _: &mut HashMap<ConnectionID, Connection>
+        ) {
+
+            // Accumulate time so we can check that the artifical delay
+            // was correct for by the servers tick loop
+            if self.tick_count > 1 {
+                self.accumulated += precise_time_ms() - self.last_tick_time;
+            }
+
+            self.last_tick_time = precise_time_ms();
+            self.tick_count += 1;
+
+            if self.tick_count == 5 {
+                server.shutdown();
+            }
+
+            // Fake some load inside of the tick handler
+            thread::sleep_ms(50);
+
+        }
+
+    }
+
+    fn precise_time_ms() -> u32 {
+        (clock_ticks::precise_time_ns() / 1000000) as u32
+    }
+
+    #[test]
+    fn test_server_tick_delay() {
+
+        let config = Config {
+            send_rate: 10,
+            .. Config::default()
+        };
+
+        let mut handler = MockServerHandler {
+            last_tick_time: 0,
+            tick_count: 0,
+            accumulated: 0
+        };
+
+        let mut server = Server::new(config);
+        server.bind(&mut handler, "127.0.0.1:0").unwrap();
+
+        //
+        assert!(handler.accumulated <= 310);
+
     }
 
 }
