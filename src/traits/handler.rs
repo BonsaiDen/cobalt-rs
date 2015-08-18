@@ -3,7 +3,7 @@ use super::super::{
     BinaryRateLimiter, Connection, ConnectionID, Config, RateLimiter
 };
 
-/// Trait for implementation of client / server event handling.
+/// Trait for implementation a proxy which receives client and server events.
 pub trait Handler<T> {
 
     // Factories

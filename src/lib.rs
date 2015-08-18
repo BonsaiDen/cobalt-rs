@@ -1,30 +1,28 @@
 //! **cobalt** is a networking library which provides [virtual connections
 //! over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/)
-//! and along with a messaging layer for sending both unreliable, reliable and
-//! ordered messages.
+//! along with a messaging layer for sending both unreliable, reliable as well
+//! as ordered messages.
 //!
 //! It is primarily designed to be used as the basis for real-time, latency
-//! limited, multi client systems such as fast paced action games.
+//! bound, multi client systems.
 //!
 //! The library provides the underlying architecture required for handling and
-//! maintaining virtual connections over a UDP socket and sending reliable
-//! messages over the established client-server connections.
+//! maintaining virtual connections over UDP sockets and takes care of sending
+//! reliable, raw messages over the established client-server connections with
+//! minimal overhead.
 //!
-//! One of the main goals is to keep the overall overhead for connection
-//! management and message de-/serialization small, while also providing a
-//! clean API for easy implementation of use defined server and client logic.
+//! cobalt is also fully configurable and can be plugged in a variety of ways,
+//! so that library users have the largest possible degree of control over
+//! the behavior of their connections.
 //!
-//! Configuration is also an important factor when it comes to network
-//! interaction and so cobalt allows to configure connections and their
-//! behavior to the largest possible degree.
+//! ## Getting started
 //!
-//! ## Basic Server Handler
+//! When working with **cobalt** the most important part is implementing the so
+//! called handlers. A `Handler` is a trait which acts as a event proxy for
+//! both server and client events that are emitted from the underlying tick
+//! loop.
 //!
-//! The basis of a system that uses **cobalt** is to implementing a so called
-//! `Handler`, which receives will have its methods called for all kinds of
-//! different server / client related events.
-//!
-//! Below is a very basic example implementation for a game server.
+//! Below follows a very basic example implementation of a custom game server.
 //!
 //! ```
 //! use std::collections::HashMap;
