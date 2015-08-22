@@ -32,10 +32,10 @@ impl Client {
         self.address
     }
 
-    /// Tries to establish connection to the server specified by the address.
+    /// Establishes a connection with the server at the specified address by
+    /// creating a local socket for message sending.
     ///
-    /// The server must use a compatible configuration in order for
-    /// the connection to be actually established.
+    /// The server must use a compatible connection / packet configuration.
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
     /// to handle events from the client and its connection.
@@ -43,21 +43,38 @@ impl Client {
         &mut self, handler: &mut Handler<Client>, address: T
     ) -> Result<(), Error> {
 
-        // Create connection and parse remote address
+        let socket = try!(UdpSocket::new(
+            "127.0.0.1:0",
+            self.config.packet_max_size
+        ));
+
+        self.connect_from_socket(handler, address, socket)
+
+    }
+
+    /// Establishes a connection with the server at the specified address by
+    /// using the specified socket for message sending.
+    ///
+    /// The server must use a compatible connection / packet configuration.
+    ///
+    /// The `handler` is a struct that implements the `Handler` trait in order
+    /// to handle events from the client and its connection.
+    pub fn connect_from_socket<T: Socket, A: ToSocketAddrs>(
+        &mut self, handler: &mut Handler<Client>, address: A, mut socket: T
+    ) -> Result<(), Error> {
+
+        // Parse remote address of server
         let peer_addr = try!(address.to_socket_addrs()).next().unwrap();
+
+        // Extract bound address
+        self.address = Some(try!(socket.local_addr()));
+
+        // Create connection
         let mut connection = Connection::new(
             self.config,
             peer_addr,
             handler.rate_limiter(&self.config)
         );
-
-        // Create the UDP socket
-        let mut socket = try!(UdpSocket::new(
-            "127.0.0.1:0",
-            self.config.packet_max_size
-        ));
-
-        self.address = Some(try!(socket.local_addr()));
 
         // Extract packet reader
         let reader = socket.reader().unwrap();

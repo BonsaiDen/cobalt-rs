@@ -33,11 +33,11 @@ impl Server {
         self.address
     }
 
-    /// Tries to bind the server to the specified local address and actively
-    /// listens for and manages incoming client connections.
+    /// Binds the server to the specified local address by creating a socket
+    /// and actively listens for incoming client connections.
     ///
-    /// The clients must use a compatible configuration in order for
-    /// connections to be actually established.
+    /// Clients connecting to the server must use a compatible connection
+    /// / packet configuration in order to be able to connect.
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
     /// to handle events from the server and its connections.
@@ -45,12 +45,28 @@ impl Server {
         &mut self, handler: &mut Handler<Server>, address: T
     ) -> Result<(), Error> {
 
-        // Create the UDP socket
-        let mut socket = try!(UdpSocket::new(
+        let socket = try!(UdpSocket::new(
             address,
             self.config.packet_max_size
         ));
 
+        self.bind_to_socket(handler, socket)
+
+    }
+
+    /// Binds the server to specified socket and actively listens for incoming
+    /// client connections.
+    ///
+    /// Clients connecting to the server must use a compatible connection
+    /// / packet configuration in order to be able to connect.
+    ///
+    /// The `handler` is a struct that implements the `Handler` trait in order
+    /// to handle events from the server and its connections.
+    pub fn bind_to_socket<T: Socket>(
+        &mut self, handler: &mut Handler<Server>, mut socket: T
+    ) -> Result<(), Error> {
+
+        // Extract bound address
         self.address = Some(try!(socket.local_addr()));
 
         // Extract packet reader
