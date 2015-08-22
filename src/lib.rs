@@ -159,6 +159,9 @@ pub use traits::handler::Handler;
 pub use traits::rate_limiter::RateLimiter;
 
 #[doc(inline)]
+pub use traits::socket::Socket;
+
+#[doc(inline)]
 pub use client::Client;
 
 #[doc(inline)]

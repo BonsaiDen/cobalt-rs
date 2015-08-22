@@ -578,7 +578,6 @@ fn moving_average(a: f32, b: f32) -> f32 {
     (a - (a - b) * 0.10).max(0.0)
 }
 
-
 fn seq_bit_index(seq: u32, ack: u32) -> u32 {
     if seq > ack {
         ack + (MAX_SEQ_NUMBER - 1 - seq)
@@ -613,7 +612,7 @@ mod tests {
 
     use std::net;
     use std::thread;
-    use std::io::Error;
+    use std::io::{Error, ErrorKind};
     use std::sync::mpsc::channel;
 
     use super::super::super::traits::socket::{Socket, SocketReader};
@@ -1269,6 +1268,14 @@ mod tests {
 
             self.send_index += 1;
             Ok(0)
+
+        }
+
+        fn local_addr(&self) -> Result<net::SocketAddr, Error> {
+            Err(Error::new(ErrorKind::AddrNotAvailable, ""))
+        }
+
+        fn shutdown(&mut self) {
 
         }
 

@@ -5,19 +5,22 @@ use std::sync::mpsc::Receiver;
 /// Asynchronous `Receiver` for UDP packets.
 pub type SocketReader = Receiver<(net::SocketAddr, Vec<u8>)>;
 
-/// Trait that defines a non-blocking abstraction over a UDP socket.
+/// Trait for implementation a non-blocking UDP socket.
 pub trait Socket {
 
-    /// Returns the channel receiver for incoming UDP packets.
-    ///
-    /// The `SocketReader` will be moved out; thus, the method will return
-    /// `None` on all subsequent calls.
+    /// Method returning a channel receiver for incoming packets.
     fn reader(&mut self) -> Option<SocketReader>;
 
-    /// Sends `data` to the specified remote address.
+    /// Method for sending `data` to the specified remote address.
     fn send<T: net::ToSocketAddrs>(
         &mut self, addr: T, data: &[u8])
     -> Result<usize, Error>;
+
+    /// Method returning the address of the actual, underlying socket.
+    fn local_addr(&self) -> Result<net::SocketAddr, Error>;
+
+    /// Method for shutting down the socket.
+    fn shutdown(&mut self);
 
 }
 
