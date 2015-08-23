@@ -67,7 +67,7 @@ pub enum ConnectionState {
 /// > \* Since the id is random integer, there is of course a very small chance
 /// > for two clients to end up using the same id, in that case - due to
 /// conflicting ack sequences and message data - both will get dropped shortly.
-#[derive(PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct ConnectionID(pub u32);
 
 /// Implementation of reliable UDP based messaging protocol.
