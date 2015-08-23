@@ -207,7 +207,8 @@ mod tests {
     use std::thread;
     use std::io::Error;
     use std::collections::HashMap;
-    use std::sync::mpsc::{channel, Receiver};
+    use std::sync::mpsc::channel;
+    use super::super::traits::socket::SocketReader;
     use super::super::{
         Connection, ConnectionID, Config, Handler, Server, Socket
     };
@@ -319,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn test_server_connection() {
+    fn test_server_connections() {
 
         let config = Config::default();
 
@@ -327,14 +328,14 @@ mod tests {
             connection_count: 0
         };
 
-        let socket = MockSocket::new([
+        let mut socket = MockSocket::new([
 
             // create a new connection from address 1
             ("127.0.0.1:1234", [
                 1, 2, 3, 4, // Protocol Header
                 0, 0, 0, 1, // Connection ID
-                0, 0, 0, 0,
-                0, 0
+                0, 0,
+                0, 0, 0, 0
 
             ].to_vec()),
 
@@ -342,8 +343,8 @@ mod tests {
             ("127.0.0.1:5678", [
                 1, 2, 3, 4, // Protocol Header
                 0, 0, 0, 2, // Connection ID
-                0, 0, 0, 0,
-                0, 0
+                0, 0,
+                0, 0, 0, 0
 
             ].to_vec()),
 
@@ -351,8 +352,8 @@ mod tests {
             ("127.0.0.1:1234", [
                 1, 2, 3, 4, // Protocol Header
                 0, 0, 0, 1, // Connection ID
-                1, 0, 0, 0,
-                0, 0,
+                1, 0,
+                0, 0, 0, 0,
 
                 // Hello World
                 0, 0, 0, 11, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100
@@ -363,11 +364,32 @@ mod tests {
             ("127.0.0.1:5678", [
                 1, 2, 3, 4, // Protocol Header
                 0, 0, 0, 2, // Connection ID
-                1, 0, 0, 0,
-                0, 0,
+                1, 0,
+                0, 0, 0, 0,
 
                 // Hello World
                 0, 0, 0, 11, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100
+
+            ].to_vec())
+
+        ].to_vec());
+
+        // Expect one packet to be send to each connection
+        socket.expect([
+            // TODO order depends on how the ID is hashed...
+            ("127.0.0.1:1234", [
+                1, 2, 3, 4,  // Protocol Header
+                0, 0, 0, 0,  // Ignored Connection ID
+                0, 1,
+                0, 0, 0, 1
+
+            ].to_vec()),
+
+            ("127.0.0.1:5678", [
+                1, 2, 3, 4,  // Protocol Header
+                0, 0, 0, 0,  // Ignored Connection ID
+                0, 1,
+                0, 0, 0, 1
 
             ].to_vec())
 
@@ -423,14 +445,14 @@ mod tests {
             connection_count: 0
         };
 
-        let socket = MockSocket::new([
+        let mut socket = MockSocket::new([
 
             // create a new connection from address 1
             ("127.0.0.1:1234", [
                 1, 2, 3, 4, // Protocol Header
                 0, 0, 0, 1, // Connection ID
+                0, 0,
                 0, 0, 0, 0,
-                0, 0
 
             ].to_vec()),
 
@@ -438,11 +460,23 @@ mod tests {
             ("127.0.0.1:5678", [
                 1, 2, 3, 4, // Protocol Header
                 0, 0, 0, 1, // Connection ID
-                1, 0, 0, 0,
-                0, 0,
+                1, 0,
+                0, 0, 0, 0,
 
                 // Hello World
                 0, 0, 0, 11, 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100
+
+            ].to_vec())
+
+        ].to_vec());
+
+        // Expect one packet for connection 1 to be send to address 2
+        socket.expect([
+            ("127.0.0.1:5678", [
+                1, 2, 3, 4,  // Protocol Header
+                0, 0, 0, 0,  // Ignored Connection ID
+                0, 1,
+                0, 0, 0, 1
 
             ].to_vec())
 
@@ -458,20 +492,31 @@ mod tests {
 
     // Generic receicing socket mock
     struct MockSocket {
-        messages: Option<Vec<(&'static str, Vec<u8>)>>
+        messages: Option<Vec<(&'static str, Vec<u8>)>>,
+        send_packets: Vec<(&'static str, Vec<u8>)>,
+        send_count: usize
     }
 
     impl MockSocket {
+
         pub fn new(messages: Vec<(&'static str, Vec<u8>)>) -> MockSocket {
             MockSocket {
+                send_count: 0,
+                send_packets: Vec::new(),
                 messages: Some(messages)
             }
         }
+
+        pub fn expect(&mut self, send_packets: Vec<(&'static str, Vec<u8>)>) {
+            self.send_count = send_packets.len();
+            self.send_packets = send_packets;
+        }
+
     }
 
     impl Socket for MockSocket {
 
-        fn reader(&mut self) -> Option<Receiver<(net::SocketAddr, Vec<u8>)>> {
+        fn reader(&mut self) -> Option<SocketReader> {
 
             let (sender, receiver) = channel::<(net::SocketAddr, Vec<u8>)>();
             for (addr, data) in self.messages.take().unwrap().into_iter() {
@@ -484,10 +529,42 @@ mod tests {
         }
 
         fn send<T: net::ToSocketAddrs>(
-            &mut self, _: T, _: &[u8])
-
+            &mut self, addr: T, data: &[u8])
         -> Result<usize, Error> {
+
+            // Don't run out of expected packets
+            if self.send_packets.len() == 0 {
+                panic!(format!("Expected at most {} packet(s) to be send over socket.", self.send_count));
+            }
+
+            let addr_to: net::SocketAddr = addr.to_socket_addrs().unwrap().next().unwrap();
+
+            // Search for the next packet with the matching address
+            let mut index: i32 = -1;
+            for (i, p) in self.send_packets.iter().enumerate() {
+
+                // Verify receiver address
+                let to: net::SocketAddr = p.0.parse().ok().unwrap();
+                if to == addr_to {
+                    index = i as i32;
+                    break;
+                }
+
+            }
+
+            if index == -1 {
+                panic!(format!("Expected no more packet(s) to be send over socket to address {}", addr_to));
+            }
+
+            let expected = self.send_packets.remove(index as usize);
+
+            // Verify packet data we ignore the connection ID here since it is
+            // random and cannot be accessed by the mockes
+            assert_eq!(&data[0..4], &expected.1[0..4]);
+            assert_eq!(&data[8..], &expected.1[8..]);
+
             Ok(0)
+
         }
 
         fn local_addr(&self) -> Result<net::SocketAddr, Error> {
