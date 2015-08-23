@@ -138,7 +138,6 @@ mod tests {
     extern crate clock_ticks;
 
     use std::thread;
-    use std::collections::HashMap;
     use super::super::{Connection, Config, Handler, Client};
 
     struct MockServerHandler {
