@@ -613,16 +613,16 @@ mod tests {
     use std::net;
     use std::thread;
     use std::io::{Error, ErrorKind};
-    use std::sync::mpsc::channel;
 
-    use super::super::super::traits::socket::{Socket, SocketReader};
+    use super::super::super::traits::socket::SocketReader;
     use super::super::super::{
-            BinaryRateLimiter,
-            Connection,
-            ConnectionState,
-            Config,
-            MessageKind,
-            Handler
+        BinaryRateLimiter,
+        Connection,
+        ConnectionState,
+        Config,
+        MessageKind,
+        Handler,
+        Socket
     };
 
     fn connection() -> Connection {
@@ -1225,22 +1225,16 @@ mod tests {
     // Socket Mock ----------------------------------------------------------------
     pub struct MockSocket {
         send_packets: Vec<Vec<u8>>,
-        send_index: usize,
-        receiver: Option<SocketReader>
+        send_index: usize
     }
 
     impl MockSocket {
 
         pub fn new(send_packets: Vec<Vec<u8>>) -> MockSocket {
-
-            let (_, receiver) = channel::<(net::SocketAddr, Vec<u8>)>();
-
             MockSocket {
                 send_packets: send_packets,
-                send_index: 0,
-                receiver: Some(receiver)
+                send_index: 0
             }
-
         }
 
         pub fn expect(&mut self, send_packets: Vec<Vec<u8>>) {
@@ -1253,7 +1247,7 @@ mod tests {
     impl Socket for MockSocket {
 
         fn reader(&mut self) -> Option<SocketReader> {
-            self.receiver.take()
+            None
         }
 
         fn send<T: net::ToSocketAddrs>(
@@ -1261,7 +1255,9 @@ mod tests {
         -> Result<usize, Error> {
 
             // Don't run out of expected packets
-            assert!(self.send_index < self.send_packets.len());
+            if self.send_index >= self.send_packets.len() {
+                panic!(format!("Expected at most {} packet(s) to be send over socket.", self.send_packets.len()));
+            }
 
             // Verify packet data
             assert_eq!(data, &self.send_packets[self.send_index][..]);
