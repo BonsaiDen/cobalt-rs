@@ -69,9 +69,6 @@ impl Server {
         // Store bound socket address
         self.local_address = Some(try!(socket.local_addr()));
 
-        // Extract packet reader
-        let reader = socket.reader().unwrap();
-
         // Create connection management collections
         let mut dropped: Vec<ConnectionID> = Vec::new();
         let mut addresses: HashMap<ConnectionID, SocketAddr> = HashMap::new();
@@ -88,7 +85,7 @@ impl Server {
             let begin = clock_ticks::precise_time_ns();
 
             // Receive all incoming UDP packets to our local address
-            while let Ok((addr, packet)) = reader.try_recv() {
+            while let Ok((addr, packet)) = socket.try_recv() {
 
                 // Try to extract the connection id from the packet
                 match Connection::id_from_packet(&self.config, &packet) {

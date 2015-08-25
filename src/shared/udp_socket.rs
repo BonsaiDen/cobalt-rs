@@ -1,8 +1,8 @@
+use std::net;
 use std::thread;
 use std::io::Error;
-use std::net;
-use std::sync::mpsc::{channel, Sender};
-use super::super::traits::socket::{Socket, SocketReader};
+use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use super::super::traits::socket::Socket;
 
 /// Non-blocking abstraction over a UDP socket.
 ///
@@ -13,7 +13,7 @@ use super::super::traits::socket::{Socket, SocketReader};
 pub struct UdpSocket {
     socket: net::UdpSocket,
     reader_thread: Option<thread::JoinHandle<()>>,
-    udp_receiver: Option<SocketReader>,
+    udp_receiver: Receiver<(net::SocketAddr, Vec<u8>)>,
     close_sender: Sender<()>
 }
 
@@ -72,7 +72,7 @@ impl UdpSocket {
         Ok(UdpSocket {
             socket: sender,
             reader_thread: Some(reader_thread),
-            udp_receiver: Some(r_udp),
+            udp_receiver: r_udp,
             close_sender: s_close
         })
 
@@ -82,22 +82,20 @@ impl UdpSocket {
 
 impl Socket for UdpSocket {
 
-    /// Returns the channel receiver for incoming UDP packets.
-    ///
-    /// The `SocketReader` will be moved out; thus, the method will return
-    /// `None` on all subsequent calls.
-    fn reader(&mut self) -> Option<SocketReader> {
-        self.udp_receiver.take()
+    /// Attempts to return a incoming packet on this socket without blocking.
+    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
+        self.udp_receiver.try_recv()
     }
 
-    /// Sends `data` to the specified remote address.
-    fn send<T: net::ToSocketAddrs>(
-        &mut self, addr: T, data: &[u8])
+    /// Send data on the socket to the given address. On success, returns the
+    /// number of bytes written.
+    fn send_to<A: net::ToSocketAddrs>(
+        &mut self, data: &[u8], addr: A)
     -> Result<usize, Error> {
         self.socket.send_to(data, addr)
     }
 
-    /// Returns the socket address of the underlying UdpSocket.
+    /// Returns the socket address of the underlying `net::UdpSocket`.
     fn local_addr(&self) -> Result<net::SocketAddr, Error> {
         self.socket.local_addr()
     }

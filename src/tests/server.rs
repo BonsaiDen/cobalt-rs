@@ -4,8 +4,7 @@ use std::net;
 use std::thread;
 use std::io::Error;
 use std::collections::HashMap;
-use std::sync::mpsc::channel;
-use super::super::traits::socket::SocketReader;
+use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use super::super::{
     Connection, ConnectionID, Config, Handler, Server, Socket
 };
@@ -289,19 +288,27 @@ fn test_server_connection_remapping() {
 
 // Generic receiving socket mock
 struct MockSocket {
-    messages: Option<Vec<(&'static str, Vec<u8>)>>,
     send_packets: Vec<(&'static str, Vec<u8>)>,
+    receiver: Receiver<(net::SocketAddr, Vec<u8>)>,
     send_count: usize
 }
 
 impl MockSocket {
 
     pub fn new(messages: Vec<(&'static str, Vec<u8>)>) -> MockSocket {
+
+        let (sender, receiver) = channel::<(net::SocketAddr, Vec<u8>)>();
+        for (addr, data) in messages.into_iter() {
+            let src: net::SocketAddr = addr.parse().ok().unwrap();
+            sender.send((src, data.clone())).ok();
+        }
+
         MockSocket {
             send_count: 0,
             send_packets: Vec::new(),
-            messages: Some(messages)
+            receiver: receiver
         }
+
     }
 
     pub fn expect(&mut self, send_packets: Vec<(&'static str, Vec<u8>)>) {
@@ -313,20 +320,12 @@ impl MockSocket {
 
 impl Socket for MockSocket {
 
-    fn reader(&mut self) -> Option<SocketReader> {
-
-        let (sender, receiver) = channel::<(net::SocketAddr, Vec<u8>)>();
-        for (addr, data) in self.messages.take().unwrap().into_iter() {
-            let src: net::SocketAddr = addr.parse().ok().unwrap();
-            sender.send((src, data.clone())).ok();
-        }
-
-        Some(receiver)
-
+    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
+        self.receiver.try_recv()
     }
 
-    fn send<T: net::ToSocketAddrs>(
-        &mut self, addr: T, data: &[u8])
+    fn send_to<A: net::ToSocketAddrs>(
+        &mut self, data: &[u8], addr: A)
     -> Result<usize, Error> {
 
         // Don't run out of expected packets

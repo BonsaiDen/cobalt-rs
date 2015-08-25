@@ -59,7 +59,7 @@ fn test_client_tick_delay() {
     };
 
     let mut client = Client::new(config);
-    client.connect(&mut handler, "127.0.0.1:0").unwrap();
+    client.connect(&mut handler, "127.0.0.1:12345").unwrap();
 
     assert!(handler.accumulated <= 350);
 

@@ -82,9 +82,6 @@ impl Client {
         self.peer_address = Some(peer_addr);
         self.local_address = Some(try!(socket.local_addr()));
 
-        // Extract packet reader
-        let reader = socket.reader().unwrap();
-
         // Invoke handler
         handler.connect(self);
 
@@ -97,7 +94,7 @@ impl Client {
 
             // Receive all incoming UDP packets from the specified remote
             // address feeding them into out connection object for parsing
-            while let Ok((addr, packet)) = reader.try_recv() {
+            while let Ok((addr, packet)) = socket.try_recv() {
                 if addr == peer_addr {
                     connection.receive_packet(packet, self, handler);
                 }

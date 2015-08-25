@@ -1,19 +1,18 @@
-use std::io::Error;
 use std::net;
-use std::sync::mpsc::Receiver;
-
-/// Asynchronous `Receiver` for UDP packets.
-pub type SocketReader = Receiver<(net::SocketAddr, Vec<u8>)>;
+use std::io::Error;
+use std::sync::mpsc::TryRecvError;
 
 /// Trait for implementation a non-blocking UDP socket.
 pub trait Socket {
 
-    /// Method returning a channel receiver for incoming packets.
-    fn reader(&mut self) -> Option<SocketReader>;
+    /// Method that attempts to return a incoming packet on this socket without
+    /// blocking.
+    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError>;
 
-    /// Method for sending `data` to the specified remote address.
-    fn send<T: net::ToSocketAddrs>(
-        &mut self, addr: T, data: &[u8])
+    /// Method sending data on the socket to the given address. On success,
+    /// returns the number of bytes written.
+    fn send_to<A: net::ToSocketAddrs>(
+        &mut self, data: &[u8], addr: A)
     -> Result<usize, Error>;
 
     /// Method returning the address of the actual, underlying socket.

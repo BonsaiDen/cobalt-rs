@@ -11,7 +11,7 @@ fn test_client_connection_failure() {
     let config = Config::default();
     let mut handler = MockClientHandler::new();
     let mut client = Client::new(config);
-    client.connect(&mut handler, "127.0.0.1:0").unwrap();
+    client.connect(&mut handler, "127.0.0.1:12345").unwrap();
 
     assert_eq!(handler.connect_calls, 1);
     assert!(handler.tick_connection_calls > 0);

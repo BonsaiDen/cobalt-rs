@@ -1,8 +1,8 @@
 use std::net;
 use std::thread;
 use std::io::{Error, ErrorKind};
+use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
-use super::super::traits::socket::SocketReader;
 use super::super::{
     BinaryRateLimiter,
     Connection,
@@ -613,15 +613,20 @@ impl Handler<MockOwner> for MockOwnerHandler {}
 // Socket Mock ----------------------------------------------------------------
 pub struct MockSocket {
     send_packets: Vec<Vec<u8>>,
-    send_index: usize
+    send_index: usize,
+    receiver: Receiver<(net::SocketAddr, Vec<u8>)>
 }
 
 impl MockSocket {
 
     pub fn new(send_packets: Vec<Vec<u8>>) -> MockSocket {
+
+        let (_, receiver) = channel::<(net::SocketAddr, Vec<u8>)>();
+
         MockSocket {
             send_packets: send_packets,
-            send_index: 0
+            send_index: 0,
+            receiver: receiver
         }
     }
 
@@ -634,12 +639,12 @@ impl MockSocket {
 
 impl Socket for MockSocket {
 
-    fn reader(&mut self) -> Option<SocketReader> {
-        None
+    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
+        self.receiver.try_recv()
     }
 
-    fn send<T: net::ToSocketAddrs>(
-        &mut self, _: T, data: &[u8])
+    fn send_to<A: net::ToSocketAddrs>(
+        &mut self, data: &[u8], _: A)
     -> Result<usize, Error> {
 
         // Don't run out of expected packets

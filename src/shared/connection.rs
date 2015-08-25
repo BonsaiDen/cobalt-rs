@@ -265,8 +265,8 @@ impl Connection {
     }
 
     /// Receives a incoming UDP packet.
-    pub fn receive_packet<T>(
-        &mut self, packet: Vec<u8>, owner: &mut T, handler: &mut Handler<T>
+    pub fn receive_packet<O>(
+        &mut self, packet: Vec<u8>, owner: &mut O, handler: &mut Handler<O>
     ) {
 
         // Ignore any packets shorter then the header length
@@ -373,11 +373,11 @@ impl Connection {
 
     }
 
-    /// Creates a new outgoing UDP packet.
-    pub fn send_packet<T, S: Socket>(
+    /// Send a new outgoing UDP packet.
+    pub fn send_packet<O, S: Socket>(
         &mut self,
-        socket: &mut S, address: &SocketAddr,
-        owner: &mut T, handler: &mut Handler<T>
+        socket: &mut S, addr: &SocketAddr,
+        owner: &mut O, handler: &mut Handler<O>
     ) {
 
         // Update connection state
@@ -463,10 +463,12 @@ impl Connection {
                 owner, self, &mut packet[PACKET_HEADER_SIZE..]
             );
 
-            socket.send(*address, &packet[..PACKET_HEADER_SIZE + remaining]).ok();
+            socket.send_to(
+                &packet[..PACKET_HEADER_SIZE + remaining], *addr
+            ).unwrap();
 
         } else {
-            socket.send(*address, &packet[..]).ok();
+            socket.send_to(&packet[..], *addr).unwrap();
         }
 
 
