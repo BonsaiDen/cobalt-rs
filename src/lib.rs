@@ -121,7 +121,6 @@
 //! let mut client = Client::new(Config::default());
 //! client.connect(&mut handler, "127.0.0.1:7156").unwrap();
 //! ```
-//!
 
 mod client;
 mod server;
@@ -166,4 +165,12 @@ pub use client::Client;
 
 #[doc(inline)]
 pub use server::Server;
+
+#[cfg(test)]
+mod tests {
+    mod client;
+    mod connection;
+    mod message_queue;
+    mod server;
+}
 
