@@ -1,10 +1,10 @@
 extern crate clock_ticks;
 
-use std::thread;
 use std::cmp;
-use std::io::Error;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::thread;
+use std::io::{Error, ErrorKind};
 use std::collections::HashMap;
+use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::udp_socket::UdpSocket;
 use super::{Config, Connection, ConnectionID, Handler};
@@ -14,7 +14,7 @@ use super::{Config, Connection, ConnectionID, Handler};
 pub struct Server {
     closed: bool,
     config: Config,
-    address: Option<SocketAddr>
+    local_address: Option<SocketAddr>
 }
 
 impl Server {
@@ -24,13 +24,13 @@ impl Server {
         Server {
             closed: false,
             config: config,
-            address: None
+            local_address: None
         }
     }
 
-    /// Returns the local address the server is currently bound to.
-    pub fn local_addr(&self) -> Option<SocketAddr> {
-        self.address
+    /// Returns the local address that the server is bound to.
+    pub fn local_addr(&self) -> Result<SocketAddr, Error> {
+        self.local_address.ok_or(Error::new(ErrorKind::AddrNotAvailable, ""))
     }
 
     /// Binds the server to the specified local address by creating a socket
@@ -66,8 +66,8 @@ impl Server {
         &mut self, handler: &mut Handler<Server>, mut socket: T
     ) -> Result<(), Error> {
 
-        // Extract bound address
-        self.address = Some(try!(socket.local_addr()));
+        // Store bound socket address
+        self.local_address = Some(try!(socket.local_addr()));
 
         // Extract packet reader
         let reader = socket.reader().unwrap();
@@ -176,7 +176,9 @@ impl Server {
 
         // Invoke handler
         handler.shutdown(self);
-        self.address = None;
+
+        // Reset socket address
+        self.local_address = None;
 
         // Reset all connection states
         for (_, conn) in connections.iter_mut() {
@@ -190,9 +192,18 @@ impl Server {
 
     }
 
-    /// Shuts down the server, closing all active connections.
-    pub fn shutdown(&mut self) {
-        self.closed = true;
+    /// Shuts down the server, closing all active client connections.
+    ///
+    /// This exits the tick loop, resets all connections and shuts down the
+    /// underlying socket the server was bound to.
+    pub fn shutdown(&mut self) -> Result<(), Error> {
+        if self.closed {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+
+        } else {
+            self.closed = true;
+            Ok(())
+        }
     }
 
 }
@@ -234,7 +245,7 @@ mod tests {
             _: &mut HashMap<ConnectionID, Connection>
         ) {
 
-            // Accumulate time so we can check that the artifical delay
+            // Accumulate time so we can check that the artificial delay
             // was correct for by the servers tick loop
             if self.tick_count > 1 {
                 self.accumulated += precise_time_ms() - self.last_tick_time;
@@ -244,7 +255,7 @@ mod tests {
             self.tick_count += 1;
 
             if self.tick_count == 5 {
-                server.shutdown();
+                server.shutdown().unwrap();
             }
 
             // Fake some load inside of the tick handler
@@ -313,7 +324,7 @@ mod tests {
                 }
             }
 
-            server.shutdown();
+            server.shutdown().unwrap();
 
         }
 
@@ -430,7 +441,7 @@ mod tests {
                 check_messages(conn);
             }
 
-            server.shutdown();
+            server.shutdown().unwrap();
 
         }
 
@@ -490,7 +501,7 @@ mod tests {
 
     }
 
-    // Generic receicing socket mock
+    // Generic receiving socket mock
     struct MockSocket {
         messages: Option<Vec<(&'static str, Vec<u8>)>>,
         send_packets: Vec<(&'static str, Vec<u8>)>,

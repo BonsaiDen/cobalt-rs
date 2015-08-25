@@ -143,7 +143,7 @@ impl Handler<Client> for MockClientHandler {
 
     fn connection_failed(&mut self, client: &mut Client, _: &mut Connection) {
         self.connection_failed_calls += 1;
-        client.close();
+        client.close().unwrap();
     }
 
     fn connection_packet_lost(
@@ -158,7 +158,7 @@ impl Handler<Client> for MockClientHandler {
 
     fn connection_lost(&mut self, client: &mut Client, _: &mut Connection) {
         self.connection_lost_calls += 1;
-        client.close();
+        client.close().unwrap();
     }
 
 }
@@ -212,7 +212,7 @@ impl Handler<Server> for MockServerHandler {
         self.tick_connections_calls += 1;
 
         if self.tick_connections_calls > self.shutdown_ticks {
-            server.shutdown();
+            server.shutdown().unwrap();
         }
 
     }

@@ -72,7 +72,7 @@ impl Handler<Client> for ClientHandler {
 
     fn connection_failed(&mut self, client: &mut Client, _: &mut Connection) {
         println!("Client::connection_failed");
-        client.close();
+        client.close().unwrap();
     }
 
     fn connection_packet_lost(
@@ -87,7 +87,7 @@ impl Handler<Client> for ClientHandler {
 
     fn connection_lost(&mut self, client: &mut Client, _: &mut Connection) {
         println!("Client::connection_lost");
-        client.close();
+        client.close().unwrap();
     }
 
 }

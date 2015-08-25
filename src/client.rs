@@ -1,8 +1,8 @@
 extern crate clock_ticks;
 
-use std::thread;
 use std::cmp;
-use std::io::Error;
+use std::thread;
+use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::udp_socket::UdpSocket;
@@ -13,7 +13,8 @@ use super::{Config, Connection, Handler};
 pub struct Client {
     closed: bool,
     config: Config,
-    address: Option<SocketAddr>
+    peer_address: Option<SocketAddr>,
+    local_address: Option<SocketAddr>
 }
 
 impl Client {
@@ -23,13 +24,19 @@ impl Client {
         Client {
             closed: false,
             config: config,
-            address: None
+            peer_address: None,
+            local_address: None
         }
     }
 
     /// Returns the address of the server the client is currently connected to.
-    pub fn peer_addr(&self) -> Option<SocketAddr> {
-        self.address
+    pub fn peer_addr(&self) -> Result<SocketAddr, Error> {
+        self.peer_address.ok_or(Error::new(ErrorKind::AddrNotAvailable, ""))
+    }
+
+    /// Returns the local address that the client is sending from.
+    pub fn local_addr(&self) -> Result<SocketAddr, Error> {
+        self.local_address.ok_or(Error::new(ErrorKind::AddrNotAvailable, ""))
     }
 
     /// Establishes a connection with the server at the specified address by
@@ -63,18 +70,17 @@ impl Client {
         &mut self, handler: &mut Handler<Client>, address: A, mut socket: T
     ) -> Result<(), Error> {
 
-        // Parse remote address of server
+        // Parse remote address and create connection
         let peer_addr = try!(address.to_socket_addrs()).next().unwrap();
-
-        // Extract bound address
-        self.address = Some(try!(socket.local_addr()));
-
-        // Create connection
         let mut connection = Connection::new(
             self.config,
             peer_addr,
             handler.rate_limiter(&self.config)
         );
+
+        // Store socket addresses
+        self.peer_address = Some(peer_addr);
+        self.local_address = Some(try!(socket.local_addr()));
 
         // Extract packet reader
         let reader = socket.reader().unwrap();
@@ -113,7 +119,10 @@ impl Client {
 
         // Invoke handler
         handler.close(self);
-        self.address = None;
+
+        // Reset socket addresses
+        self.peer_address = None;
+        self.local_address = None;
 
         // Reset connection state
         connection.reset();
@@ -125,9 +134,18 @@ impl Client {
 
     }
 
-    /// Closes the clients connections to the server.
-    pub fn close(&mut self) {
-        self.closed = true;
+    /// Closes the connection to the server.
+    ///
+    /// This exits the tick loop, resets the connection and shuts down the
+    /// underlying socket the client was sending from.
+    pub fn close(&mut self) -> Result<(), Error>{
+        if self.closed {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+
+        } else {
+            self.closed = true;
+            Ok(())
+        }
     }
 
 }
@@ -157,7 +175,7 @@ mod tests {
             _: &mut Connection
         ) {
 
-            // Accumulate time so we can check that the artifical delay
+            // Accumulate time so we can check that the artificial delay
             // was correct for by the servers tick loop
             if self.tick_count > 1 {
                 self.accumulated += precise_time_ms() - self.last_tick_time;
@@ -167,7 +185,7 @@ mod tests {
             self.tick_count += 1;
 
             if self.tick_count == 5 {
-                client.close();
+                client.close().unwrap();
             }
 
             // Fake some load inside of the tick handler
