@@ -22,6 +22,15 @@ and this to your crate root:
 extern crate cobalt;
 ```
 
+You can also enable optional features such as handlers for lost packets or
+packet compression inside `Cargo.toml`:
+
+```toml
+[dependencies.cobalt]
+version = "0.3.0"
+features = ["packet_handler_lost", "packet_handler_compress"]
+```
+
 ## Licensed under MIT
 
 Copyright (c) 2015 Ivo Wetzel.

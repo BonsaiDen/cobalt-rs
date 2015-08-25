@@ -323,16 +323,39 @@ impl Connection {
                     None
                 }
 
-            // Push messages from lost packets into the queue and notify the handler
             } {
+
+                // Push messages from lost packets into the queue
                 self.message_queue.lost_packet(&lost_packet[PACKET_HEADER_SIZE..]);
-                handler.connection_packet_lost(owner, self, &lost_packet[PACKET_HEADER_SIZE..]);
+
+                // Optional packet lost notification
+                if cfg!(feature = "packet_handler_lost") {
+                    // TODO test handler
+                    handler.connection_packet_lost(
+                        owner, self, &lost_packet[PACKET_HEADER_SIZE..]
+                    );
+                }
+
             }
 
         }
 
         // Push packet data into message queue
-        self.message_queue.receive_packet(&packet[PACKET_HEADER_SIZE..]);
+        if cfg!(feature = "packet_handler_compress") {
+
+            // TODO test decompression
+
+            // Optional packet decompression
+            let packet = handler.connection_packet_decompress(
+                owner, self,
+                &packet[PACKET_HEADER_SIZE..]
+            );
+
+            self.message_queue.receive_packet(&packet[..]);
+
+        } else {
+            self.message_queue.receive_packet(&packet[PACKET_HEADER_SIZE..]);
+        }
 
         // Remove all acknowledged and lost packets from the sent ack queue
         self.sent_ack_queue.retain(|p| p.state == PacketState::Unknown);
@@ -431,7 +454,21 @@ impl Connection {
         );
 
         // Send packet to socket
-        socket.send(*address, &packet[..]).ok();
+        if cfg!(feature = "packet_handler_compress") {
+
+            // TODO test compression
+
+            // Optional packet compression
+            let remaining = handler.connection_packet_compress(
+                owner, self, &mut packet[PACKET_HEADER_SIZE..]
+            );
+
+            socket.send(*address, &packet[..PACKET_HEADER_SIZE + remaining]).ok();
+
+        } else {
+            socket.send(*address, &packet[..]).ok();
+        }
+
 
         // Insert packet into send acknowledgment queue (but avoid dupes)
         if self.send_ack_required(self.local_seq_number) == true {

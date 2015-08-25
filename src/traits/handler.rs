@@ -58,13 +58,6 @@ pub trait Handler<T> {
     fn connection_failed(&mut self, _: &mut T, _: &mut Connection) {
     }
 
-    /// Method that is called each time a packet send by a connection is lost.
-    fn connection_packet_lost(
-        &mut self, _: &mut T, _: &mut Connection, _: &[u8]
-    ) {
-
-    }
-
     /// Method that is called each time the congestion state of connection
     /// changes.
     fn connection_congestion_state(&mut self, _: &mut T, _: &mut Connection, _: bool) {
@@ -72,6 +65,49 @@ pub trait Handler<T> {
 
     /// Method that is called each time a connection is lost and dropped.
     fn connection_lost(&mut self, _: &mut T, _: &mut Connection) {
+    }
+
+    // Packet specific
+
+    /// Method that is called each time a packet send by a connection is lost.
+    ///
+    /// > Note: This method is feature-gated and will only be included when the
+    /// `packet_handler_lost` feature is enabled.
+    fn connection_packet_lost(
+        &mut self, _: &mut T, _: &mut Connection, _: &[u8]
+    ) {
+
+    }
+
+    /// Method that is called for in-place compression purposes before a packet
+    /// is send over the connection's underlying socket.
+    ///
+    /// The returned `usize` should indicate the number of data bytes left
+    /// *after* the in-place compression has been applied.
+    ///
+    /// The default implementation does not actually perform any kind of
+    /// compression and leaves the data untouched.
+    ///
+    /// > Note: This method is feature-gated and will only be included when the
+    /// > `packet_handler_compress` feature is enabled.
+    fn connection_packet_compress(
+        &mut self, _: &mut T, _: &mut Connection, data: &mut [u8]
+    ) -> usize {
+        data.len()
+    }
+
+    /// Method that is called for decompression purposes after a packet is
+    /// received over the connection's underlying socket.
+    ///
+    /// The default implementation does not actually perform any kind of
+    /// decompression and returns the data as is.
+    ///
+    /// > Note: This method is feature-gated and will only be included when the
+    /// > `packet_handler_compress` feature is enabled.
+    fn connection_packet_decompress(
+        &mut self, _: &mut T, _: &mut Connection, data: &[u8]
+    ) -> Vec<u8> {
+        data.to_vec()
     }
 
 }

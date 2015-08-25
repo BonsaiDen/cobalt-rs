@@ -13,3 +13,7 @@ license="MIT"
 clock_ticks = "~0.0.6"
 rand = "~0.3.10"
 
+[features]
+packet_handler_lost = []
+packet_handler_compress = []
+
