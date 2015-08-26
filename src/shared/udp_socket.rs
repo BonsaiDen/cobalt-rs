@@ -6,10 +6,14 @@ use super::super::traits::socket::Socket;
 
 /// Non-blocking abstraction over a UDP socket.
 ///
-/// The non-blocking behavior is implement using a thread internally.
+/// The non-blocking behavior is implement by using a internal reader thread.
 ///
 /// The implementation guarantees that the internal thread exits cleanly in
 /// case of either the sockets shutdown or it getting dropped.
+///
+/// This will be subject to change when support for socket timeouts lands in
+/// rust 1.4. We will most likely switch to a timeout based, synchronous read
+/// loop by then.
 pub struct UdpSocket {
     socket: net::UdpSocket,
     reader_thread: Option<thread::JoinHandle<()>>,

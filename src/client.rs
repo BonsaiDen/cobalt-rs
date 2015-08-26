@@ -8,8 +8,7 @@ use traits::socket::Socket;
 use shared::udp_socket::UdpSocket;
 use super::{Config, Connection, Handler};
 
-/// Implementation of a single-server client implementation with handler based
-/// event dispatching.
+/// Implementation of a single-server client with handler based event dispatch.
 pub struct Client {
     closed: bool,
     config: Config,
@@ -46,8 +45,8 @@ impl Client {
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
     /// to handle events from the client and its connection.
-    pub fn connect<T: ToSocketAddrs>(
-        &mut self, handler: &mut Handler<Client>, address: T
+    pub fn connect<A: ToSocketAddrs>(
+        &mut self, handler: &mut Handler<Client>, addr: A
     ) -> Result<(), Error> {
 
         let socket = try!(UdpSocket::new(
@@ -55,7 +54,7 @@ impl Client {
             self.config.packet_max_size
         ));
 
-        self.connect_from_socket(handler, address, socket)
+        self.connect_from_socket(handler, addr, socket)
 
     }
 
@@ -66,12 +65,12 @@ impl Client {
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
     /// to handle events from the client and its connection.
-    pub fn connect_from_socket<T: Socket, A: ToSocketAddrs>(
-        &mut self, handler: &mut Handler<Client>, address: A, mut socket: T
+    pub fn connect_from_socket<S: Socket, A: ToSocketAddrs>(
+        &mut self, handler: &mut Handler<Client>, addr: A, mut socket: S
     ) -> Result<(), Error> {
 
         // Parse remote address and create connection
-        let peer_addr = try!(address.to_socket_addrs()).next().unwrap();
+        let peer_addr = try!(addr.to_socket_addrs()).next().unwrap();
         let mut connection = Connection::new(
             self.config,
             peer_addr,

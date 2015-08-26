@@ -1,4 +1,4 @@
-/// Trait for implementation network congestion avoidance algorithms.
+/// Trait for implementation of a network congestion avoidance algorithm.
 pub trait RateLimiter {
 
     /// Method implementing a congestion avoidance algorithm based on round

@@ -76,9 +76,9 @@ impl<'a> Iterator for MessageIterator<'a> {
 
 }
 
-/// Queue that manages the sending and receiving of both reliable and
-/// unreliable message types and also supports in order transmission of
-/// messages.
+/// Implementation of a queue that manages the sending and receiving of both
+/// reliable and unreliable message types and also supports optional in order
+/// transmission.
 pub struct MessageQueue {
 
     /// The queue's configuration

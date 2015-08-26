@@ -70,7 +70,7 @@ pub enum ConnectionState {
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct ConnectionID(pub u32);
 
-/// Implementation of reliable UDP based messaging protocol.
+/// Implementation of a reliable, virtual connection logic.
 pub struct Connection {
 
     /// The connection's configuration

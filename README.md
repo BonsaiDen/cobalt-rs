@@ -2,7 +2,7 @@
 
 A [rust](https://rust-lang.org/) based networking library which provides [virtual 
 connections over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) 
-and provides a messaging layer for sending reliable and/or ordered messages.
+featuring a messaging layer for sending un-/reliable and/or ordered messages.
 
 - [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt)
 

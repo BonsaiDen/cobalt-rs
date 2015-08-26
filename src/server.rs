@@ -9,8 +9,7 @@ use traits::socket::Socket;
 use shared::udp_socket::UdpSocket;
 use super::{Config, Connection, ConnectionID, Handler};
 
-/// Implementation of a multi-client server implementation with handler based
-/// event dispatching.
+/// Implementation of a multi-client server with handler based event dispatch.
 pub struct Server {
     closed: bool,
     config: Config,
@@ -41,12 +40,12 @@ impl Server {
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
     /// to handle events from the server and its connections.
-    pub fn bind<T: ToSocketAddrs>(
-        &mut self, handler: &mut Handler<Server>, address: T
+    pub fn bind<A: ToSocketAddrs>(
+        &mut self, handler: &mut Handler<Server>, addr: A
     ) -> Result<(), Error> {
 
         let socket = try!(UdpSocket::new(
-            address,
+            addr,
             self.config.packet_max_size
         ));
 
@@ -62,8 +61,8 @@ impl Server {
     ///
     /// The `handler` is a struct that implements the `Handler` trait in order
     /// to handle events from the server and its connections.
-    pub fn bind_to_socket<T: Socket>(
-        &mut self, handler: &mut Handler<Server>, mut socket: T
+    pub fn bind_to_socket<S: Socket>(
+        &mut self, handler: &mut Handler<Server>, mut socket: S
     ) -> Result<(), Error> {
 
         // Store bound socket address

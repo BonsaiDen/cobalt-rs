@@ -2,7 +2,7 @@ use std::net;
 use std::io::Error;
 use std::sync::mpsc::TryRecvError;
 
-/// Trait for implementation a non-blocking UDP socket.
+/// Trait for implementation of a non-blocking UDP socket.
 pub trait Socket {
 
     /// Method that attempts to return a incoming packet on this socket without
