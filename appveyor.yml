@@ -30,6 +30,6 @@ install:
 
 build: false
 test_script:
-  - cargo build --verbose
-  - cargo test --verbose
+  - cargo build --features "packet_handler_lost packet_handler_compress" --verbose
+  - cargo test --features "packet_handler_lost packet_handler_compress" --verbose
 
