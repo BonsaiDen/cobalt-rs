@@ -96,6 +96,7 @@ impl Server {
                             // new connection and map it to the id
                             let conn = Connection::new(
                                 self.config,
+                                socket.local_addr().unwrap(),
                                 addr,
                                 handler.rate_limiter(&self.config)
                             );

@@ -69,17 +69,18 @@ impl Client {
         &mut self, handler: &mut Handler<Client>, addr: A, mut socket: S
     ) -> Result<(), Error> {
 
-        // Parse remote address and create connection
+        // Parse remote addresses
         let peer_addr = try!(addr.to_socket_addrs()).next().unwrap();
+        self.peer_address = Some(peer_addr);
+        self.local_address = Some(try!(socket.local_addr()));
+
+        // Create connectionb
         let mut connection = Connection::new(
             self.config,
+            socket.local_addr().unwrap(),
             peer_addr,
             handler.rate_limiter(&self.config)
         );
-
-        // Store socket addresses
-        self.peer_address = Some(peer_addr);
-        self.local_address = Some(try!(socket.local_addr()));
 
         // Invoke handler
         handler.connect(self);

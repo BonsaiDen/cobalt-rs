@@ -82,7 +82,10 @@ pub struct Connection {
     /// State of the connection
     state: ConnectionState,
 
-    /// The socket address of the remote peer of the connection
+    /// The socket address of the local end of the connection
+    local_address: SocketAddr,
+
+    /// The socket address of the remote end of the connection
     peer_address: SocketAddr,
 
     /// The most recent received remote sequence number
@@ -134,21 +137,26 @@ impl Connection {
     /// use cobalt::{BinaryRateLimiter, Connection, ConnectionState, Config};
     ///
     /// let config = Config::default();
-    /// let address: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    /// let local_address: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    /// let peer_address: SocketAddr = "255.0.0.1:0".parse().unwrap();
     /// let limiter = BinaryRateLimiter::new(&config);
-    /// let conn = Connection::new(config, address, limiter);
+    /// let conn = Connection::new(config, local_address, peer_address, limiter);
     ///
     /// assert!(conn.state() == ConnectionState::Connecting);
     /// assert_eq!(conn.open(), true);
     /// ```
     pub fn new(
-        config: Config, peer_addr: SocketAddr, rate_limiter: Box<RateLimiter>
+        config: Config,
+        local_addr: SocketAddr,
+        peer_addr: SocketAddr,
+        rate_limiter: Box<RateLimiter>
 
     ) -> Connection {
         Connection {
             config: config,
             random_id: ConnectionID(rand::random()),
             state: ConnectionState::Connecting,
+            local_address: local_addr,
             peer_address: peer_addr,
             local_seq_number: 0,
             remote_seq_number: 0,
@@ -239,7 +247,12 @@ impl Connection {
         100.0 / cmp::max(self.sent_packets, 1) as f32 * self.lost_packets as f32
     }
 
-    /// Returns the socket address of the remote peer of this connection.
+    /// Returns the socket address for the local end of this connection.
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_address
+    }
+
+    /// Returns the socket address for the remote end of this connection.
     pub fn peer_addr(&self) -> SocketAddr {
         self.peer_address
     }
@@ -330,7 +343,6 @@ impl Connection {
 
                 // Optional packet lost notification
                 if cfg!(feature = "packet_handler_lost") {
-                    // TODO test handler
                     handler.connection_packet_lost(
                         owner, self, &lost_packet[PACKET_HEADER_SIZE..]
                     );
