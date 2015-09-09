@@ -8,6 +8,6 @@ matrix:
     - rust: nightly
 
 script:
-  - cargo build --features "packet_handler_lost packet_handler_compress" --verbose
-  - cargo test --features "packet_handler_lost packet_handler_compress" --verbose
+  - cargo build --features all --verbose
+  - cargo test --features all --verbose
 
