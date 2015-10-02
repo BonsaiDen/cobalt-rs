@@ -5,6 +5,7 @@ use std::thread;
 use std::io::Error;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
+use std::net::ToSocketAddrs;
 use super::super::{
     Connection, ConnectionID, Config, Handler, Server, Socket
 };
@@ -324,8 +325,8 @@ impl Socket for MockSocket {
         self.receiver.try_recv()
     }
 
-    fn send_to<A: net::ToSocketAddrs>(
-        &mut self, data: &[u8], addr: A)
+    fn send_to(
+        &mut self, data: &[u8], addr: net::SocketAddr)
     -> Result<usize, Error> {
 
         // Don't run out of expected packets

@@ -769,8 +769,8 @@ impl Socket for MockSocket {
         self.receiver.try_recv()
     }
 
-    fn send_to<A: net::ToSocketAddrs>(
-        &mut self, data: &[u8], _: A)
+    fn send_to(
+        &mut self, data: &[u8], _: net::SocketAddr)
     -> Result<usize, Error> {
 
         // Don't run out of expected packets

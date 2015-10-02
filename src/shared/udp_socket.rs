@@ -93,8 +93,8 @@ impl Socket for UdpSocket {
 
     /// Send data on the socket to the given address. On success, returns the
     /// number of bytes written.
-    fn send_to<A: net::ToSocketAddrs>(
-        &mut self, data: &[u8], addr: A)
+    fn send_to(
+        &mut self, data: &[u8], addr: net::SocketAddr)
     -> Result<usize, Error> {
         self.socket.send_to(data, addr)
     }
