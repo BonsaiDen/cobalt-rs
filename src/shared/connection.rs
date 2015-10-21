@@ -355,8 +355,6 @@ impl Connection {
         // Push packet data into message queue
         if cfg!(feature = "packet_handler_compress") {
 
-            // TODO test decompression
-
             // Optional packet decompression
             let packet = handler.connection_packet_decompress(
                 owner, self,
@@ -390,11 +388,12 @@ impl Connection {
         &mut self,
         socket: &mut S, addr: &SocketAddr,
         owner: &mut O, handler: &mut Handler<O>
-    ) {
+
+    ) -> u32 {
 
         // Update connection state
         if self.update_send_state(owner, handler) == false {
-            return;
+            return 0;
         }
 
         let congested = self.rate_limiter.congested();
@@ -411,7 +410,7 @@ impl Connection {
 
         // Check if we should be sending packets, if not skip this packet
         if self.rate_limiter.should_send() == false {
-            return;
+            return 0;
         }
 
         // Take write buffer out and insert a fresh, empty one in its place
@@ -466,9 +465,7 @@ impl Connection {
         );
 
         // Send packet to socket
-        if cfg!(feature = "packet_handler_compress") {
-
-            // TODO test compression
+        let bytes_sent = if cfg!(feature = "packet_handler_compress") {
 
             // Optional packet compression
             let remaining = handler.connection_packet_compress(
@@ -477,11 +474,18 @@ impl Connection {
 
             socket.send_to(
                 &packet[..PACKET_HEADER_SIZE + remaining], *addr
+
             ).unwrap();
+
+            // Number of bytes actually sent
+            remaining
 
         } else {
             socket.send_to(&packet[..], *addr).unwrap();
-        }
+
+            // Number of bytes actually sent
+            packet.len()
+        };
 
 
         // Insert packet into send acknowledgment queue (but avoid dupes)
@@ -503,6 +507,9 @@ impl Connection {
 
         // Update packet statistics
         self.sent_packets += 1;
+
+        // Return number of bytes sent over the socket
+        bytes_sent as u32
 
     }
 
@@ -533,6 +540,7 @@ impl Connection {
 
     fn update_receive_state<T>(
         &mut self, packet: &[u8], owner: &mut T, handler: &mut Handler<T>
+
     ) -> bool {
 
         // Ignore any packets which do not match the desired protocol header
@@ -549,6 +557,10 @@ impl Connection {
                 // Once we receive the first valid packet we consider the
                 // connection as established
                 self.state = ConnectionState::Connected;
+
+                // Reset Packet Loss upon connection
+                self.lost_packets = 0;
+
                 handler.connection(owner, self);
 
                 // The connection handler might decide to immediately disconnect
@@ -573,6 +585,7 @@ impl Connection {
 
     fn update_send_state<T>(
         &mut self, owner: &mut T, handler: &mut Handler<T>
+
     ) -> bool {
 
         // Calculate time since last received packet

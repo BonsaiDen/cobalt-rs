@@ -13,6 +13,7 @@ pub trait Socket {
     /// returns the number of bytes written.
     fn send_to(
         &mut self, data: &[u8], addr: net::SocketAddr)
+
     -> Result<usize, Error>;
 
     /// Method returning the address of the actual, underlying socket.

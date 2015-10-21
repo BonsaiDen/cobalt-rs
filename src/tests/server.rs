@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::net::ToSocketAddrs;
 use super::super::{
-    Connection, ConnectionID, Config, Handler, Server, Socket
+    Connection, ConnectionID, Config, Handler, Server, Socket, Stats
 };
 
 fn precise_time_ms() -> u32 {
@@ -46,6 +46,31 @@ impl Handler<Server> for DelayServerHandler {
 
         // Fake some load inside of the tick handler
         thread::sleep_ms(75);
+
+    }
+
+}
+
+struct MockServerStatsHandler {
+    pub tick_count: u32,
+}
+
+impl Handler<Server> for MockServerStatsHandler {
+
+    fn connect(&mut self, _: &mut Server) {
+    }
+
+    fn tick_connections(
+        &mut self, server: &mut Server,
+        _: &mut HashMap<ConnectionID, Connection>
+    ) {
+
+        //conn.send(MessageKind::Instant, b"Hello World".to_vec());
+        self.tick_count += 1;
+
+        if self.tick_count == 20 {
+            server.shutdown().unwrap();
+        }
 
     }
 
@@ -287,7 +312,30 @@ fn test_server_connection_remapping() {
 
 }
 
-// Generic receiving socket mock
+#[test]
+fn test_server_stats() {
+
+    let config = Config {
+        send_rate: 20,
+        .. Config::default()
+    };
+
+    let mut handler = MockServerStatsHandler {
+        tick_count: 0
+    };
+
+    let mut server = Server::new(config);
+    server.bind(&mut handler, "127.0.0.1:0").unwrap();
+
+    assert_eq!(server.stats(), Stats {
+        bytes_sent: 0,
+        bytes_received: 0
+    });
+
+}
+
+
+// Generic receiving socket mock ----------------------------------------------
 struct MockSocket {
     send_packets: Vec<(&'static str, Vec<u8>)>,
     receiver: Receiver<(net::SocketAddr, Vec<u8>)>,

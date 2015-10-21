@@ -131,6 +131,7 @@ mod shared {
     pub mod connection;
     pub mod message_queue;
     pub mod udp_socket;
+    pub mod stats;
 }
 
 mod traits {
@@ -152,6 +153,12 @@ pub use shared::message_queue::MessageKind;
 pub use shared::binary_rate_limiter::BinaryRateLimiter;
 
 #[doc(inline)]
+pub use shared::udp_socket::UdpSocket;
+
+#[doc(inline)]
+pub use shared::stats::Stats;
+
+#[doc(inline)]
 pub use traits::handler::Handler;
 
 #[doc(inline)]
@@ -162,6 +169,9 @@ pub use traits::socket::Socket;
 
 #[doc(inline)]
 pub use client::Client;
+
+#[doc(inline)]
+pub use client::ClientState;
 
 #[doc(inline)]
 pub use server::Server;

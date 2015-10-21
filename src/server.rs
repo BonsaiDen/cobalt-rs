@@ -7,13 +7,15 @@ use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::udp_socket::UdpSocket;
+use shared::stats::{StatsCollector, Stats};
 use super::{Config, Connection, ConnectionID, Handler};
 
 /// Implementation of a multi-client server with handler based event dispatch.
 pub struct Server {
     closed: bool,
     config: Config,
-    local_address: Option<SocketAddr>
+    local_address: Option<SocketAddr>,
+    statistics: StatsCollector
 }
 
 impl Server {
@@ -23,13 +25,19 @@ impl Server {
         Server {
             closed: false,
             config: config,
-            local_address: None
+            local_address: None,
+            statistics: StatsCollector::new(config.send_rate)
         }
     }
 
     /// Returns the local address that the server is bound to.
     pub fn local_addr(&self) -> Result<SocketAddr, Error> {
         self.local_address.ok_or(Error::new(ErrorKind::AddrNotAvailable, ""))
+    }
+
+    /// Returns statistics (i.e. bandwidth usage) for the last second.
+    pub fn stats(&mut self) -> Stats {
+        self.statistics.average()
     }
 
     /// Binds the server to the specified local address by creating a socket
@@ -42,6 +50,7 @@ impl Server {
     /// to handle events from the server and its connections.
     pub fn bind<A: ToSocketAddrs>(
         &mut self, handler: &mut Handler<Server>, addr: A
+
     ) -> Result<(), Error> {
 
         let socket = try!(UdpSocket::new(
@@ -63,10 +72,14 @@ impl Server {
     /// to handle events from the server and its connections.
     pub fn bind_to_socket<S: Socket>(
         &mut self, handler: &mut Handler<Server>, mut socket: S
+
     ) -> Result<(), Error> {
 
         // Store bound socket address
         self.local_address = Some(try!(socket.local_addr()));
+
+        // Reset stats
+        self.statistics.reset();
 
         // Create connection management collections
         let mut dropped: Vec<ConnectionID> = Vec::new();
@@ -84,6 +97,7 @@ impl Server {
             let begin = clock_ticks::precise_time_ns();
 
             // Receive all incoming UDP packets to our local address
+            let mut bytes_received = 0;
             while let Ok((addr, packet)) = socket.try_recv() {
 
                 // Try to extract the connection id from the packet
@@ -120,6 +134,9 @@ impl Server {
                             addresses.insert(id, addr);
                         }
 
+                        // Statistics
+                        bytes_received += packet.len();
+
                         // Then feed the packet into the connection object for
                         // parsing
                         connection.receive_packet(packet, self, handler);
@@ -130,10 +147,13 @@ impl Server {
 
             }
 
+            self.statistics.set_bytes_received(bytes_received as u32);
+
             // Invoke handler
             handler.tick_connections(self, &mut connections);
 
             // Create outgoing packets for all connections
+            let mut bytes_sent = 0;
             for (id, conn) in connections.iter_mut() {
 
                 // Resolve the last known remote address for this
@@ -141,7 +161,7 @@ impl Server {
                 let addr = addresses.get(id).unwrap();
 
                 // Then invoke the connection to send a outgoing packet
-                conn.send_packet(&mut socket, addr, self, handler);
+                bytes_sent += conn.send_packet(&mut socket, addr, self, handler);
 
                 // Collect all lost / closed connections
                 if conn.open() == false {
@@ -149,6 +169,10 @@ impl Server {
                 }
 
             }
+
+            // Update statistics
+            self.statistics.set_bytes_sent(bytes_sent);
+            self.statistics.tick();
 
             // Remove any dropped connections and their address mappings
             if dropped.is_empty() == false {
@@ -164,7 +188,7 @@ impl Server {
 
             // Calculate spend time in current loop iteration and limit ticks
             // accordingly
-            let spend = (clock_ticks::precise_time_ns() - begin) / 1000000 ;
+            let spend = (clock_ticks::precise_time_ns() - begin) / 1000000;
             thread::sleep_ms(
                 cmp::max(1000 / self.config.send_rate - spend as u32, 0)
             );

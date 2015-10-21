@@ -92,6 +92,7 @@ pub trait Handler<T> {
     /// > `packet_handler_compress` feature is enabled.
     fn connection_packet_compress(
         &mut self, _: &mut T, _: &mut Connection, data: &mut [u8]
+
     ) -> usize {
         data.len()
     }
@@ -106,6 +107,7 @@ pub trait Handler<T> {
     /// > `packet_handler_compress` feature is enabled.
     fn connection_packet_decompress(
         &mut self, _: &mut T, _: &mut Connection, data: &[u8]
+
     ) -> Vec<u8> {
         data.to_vec()
     }

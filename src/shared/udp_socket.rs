@@ -26,6 +26,7 @@ impl UdpSocket {
     /// Tries to create a new UDP socket by binding to the specified address.
     pub fn new<T: net::ToSocketAddrs>(
         address: T, max_packet_size: usize
+
     ) -> Result<Self, Error> {
 
         // Create the send socket
@@ -95,6 +96,7 @@ impl Socket for UdpSocket {
     /// number of bytes written.
     fn send_to(
         &mut self, data: &[u8], addr: net::SocketAddr)
+
     -> Result<usize, Error> {
         self.socket.send_to(data, addr)
     }

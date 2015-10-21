@@ -397,6 +397,7 @@ fn write_message(
     packet: &mut Vec<u8>,
     available: usize,
     written: &mut usize
+
 ) -> bool {
 
     if queue.is_empty() == false {
