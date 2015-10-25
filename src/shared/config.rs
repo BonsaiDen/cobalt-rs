@@ -1,5 +1,5 @@
 /// Structure defining connection and message configuration options.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Config {
 
     /// Number of packets send per second. Default is `30`.

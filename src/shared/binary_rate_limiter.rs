@@ -9,7 +9,7 @@ const MIN_GOOD_MODE_TIME_DELAY: u32 = 1000;
 /// Maximum time before switching back into good mode in milliseconds.
 const MAX_GOOD_MODE_TIME_DELAY: u32 = 60000;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum Mode {
     Good,
     Bad
@@ -19,6 +19,7 @@ enum Mode {
 ///
 /// It is based on the example design from the following article:
 /// http://gafferongames.com/networking-for-game-programmers/reliability-and-flow-control/
+#[derive(Debug)]
 pub struct BinaryRateLimiter {
     tick: u32,
     max_tick: u32,

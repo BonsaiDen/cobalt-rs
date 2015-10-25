@@ -18,7 +18,7 @@ const MAX_SEQ_NUMBER: u32 = 256;
 const PACKET_HEADER_SIZE: usize = 14;
 
 /// Enum indicating the state of a `SentPacketAck`.
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum PacketState {
     Unknown,
     Acked,
@@ -26,6 +26,7 @@ enum PacketState {
 }
 
 /// Structure used for packet acknowledgment of sent packets.
+#[derive(Debug)]
 struct SentPacketAck {
     seq: u32,
     time: u32,
@@ -34,7 +35,7 @@ struct SentPacketAck {
 }
 
 /// Enum indicating the state of a connection.
-#[derive(PartialEq, Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ConnectionState {
 
     /// The connection has been opened but has yet to receive the first
@@ -71,6 +72,7 @@ pub enum ConnectionState {
 pub struct ConnectionID(pub u32);
 
 /// Implementation of a reliable, virtual connection logic.
+#[derive(Debug)]
 pub struct Connection {
 
     /// The connection's configuration

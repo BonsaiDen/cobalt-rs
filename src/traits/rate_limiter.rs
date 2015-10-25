@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// Trait for implementation of a network congestion avoidance algorithm.
 pub trait RateLimiter {
 
@@ -17,5 +19,11 @@ pub trait RateLimiter {
     /// Method that resets any internal state of the rate limiter.
     fn reset(&mut self);
 
+}
+
+impl fmt::Debug for RateLimiter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "RateLimiter")
+    }
 }
 

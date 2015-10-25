@@ -9,7 +9,7 @@ const MAX_ORDER_ID: u16 = 4096;
 const MESSAGE_HEADER_BYTES: usize = 4;
 
 /// Enum for specification of a message handling algorithm.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MessageKind {
     /// Message that is going be send exactly once and ignored in case its
     /// containing packet is lost. No guarantees are made as for the order in
@@ -36,7 +36,7 @@ pub enum MessageKind {
 
 /// Structure for handling messages inside a `MessageQueue` with support for
 /// insertion into a binary min heap for order checking on received messages.
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 struct Message {
     kind: MessageKind,
     order: u16,
@@ -79,6 +79,7 @@ impl<'a> Iterator for MessageIterator<'a> {
 /// Implementation of a queue that manages the sending and receiving of both
 /// reliable and unreliable message types and also supports optional in order
 /// transmission.
+#[derive(Debug)]
 pub struct MessageQueue {
 
     /// The queue's configuration

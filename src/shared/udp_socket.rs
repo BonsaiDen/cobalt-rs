@@ -1,4 +1,5 @@
 use std::net;
+use std::fmt;
 use std::thread;
 use std::io::Error;
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
@@ -134,6 +135,12 @@ impl Drop for UdpSocket {
     fn drop(&mut self) {
         // Make sure to exit the internal thread cleanly
         self.shutdown();
+    }
+}
+
+impl fmt::Debug for UdpSocket {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "UdpSocket({:?})", self.socket)
     }
 }
 

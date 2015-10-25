@@ -1,8 +1,13 @@
 /// A structure containing stats data average of the course of one second.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Stats {
+
+    /// Average number of bytes received over the last second.
     pub bytes_sent: u32,
+
+    /// Average number of bytes received over the last second.
     pub bytes_received: u32
+
 }
 
 impl Stats {
@@ -25,6 +30,7 @@ impl Default for Stats {
 ///
 /// Uses a list of buckets and caluclates the average each time a new value is
 /// pushed into the bucket list `O(1)`.
+#[derive(Debug)]
 pub struct StatsCollector {
 
     /// Internal tick value

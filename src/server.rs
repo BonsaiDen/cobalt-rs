@@ -11,6 +11,7 @@ use shared::stats::{StatsCollector, Stats};
 use super::{Config, Connection, ConnectionID, Handler};
 
 /// Implementation of a multi-client server with handler based event dispatch.
+#[derive(Debug)]
 pub struct Server {
     closed: bool,
     config: Config,

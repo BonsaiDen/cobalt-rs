@@ -19,6 +19,7 @@ use super::{Config, Connection, Handler};
 ///
 /// 2. Non-Blocking mode, with synchronous `Handler` callbacks, available via
 /// the methods **with** the `sync` postfix.
+#[derive(Debug)]
 pub struct Client {
     closed: bool,
     running: bool,
@@ -279,6 +280,7 @@ impl Client {
 }
 
 /// A structure used for synchronous calls on a `Client` instance.
+#[derive(Debug)]
 pub struct ClientState<S: Socket> {
     socket: S,
     connection: Connection,
