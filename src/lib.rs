@@ -121,6 +121,35 @@
 //! let mut client = Client::new(Config::default());
 //! client.connect(&mut handler, "127.0.0.1:7156").unwrap();
 //! ```
+//!
+//! ## Integration with existing event loops
+//!
+//! When a client already provides its own event loop via a rendering framework
+//! or game engine, a **synchronous** version of the `Client` interface is also
+//! available in order to ease integration in such cases.
+//!
+//! In these cases it can also make sense to use a `EventQueue` like
+//! implementation of the `Handler` trait.
+//!
+//! ```
+//! use cobalt::{Client, Config, Connection, ConnectionID, Handler};
+//!
+//! struct SyncHandler;
+//! impl Handler<Client> for SyncHandler {}
+//!
+//! let mut handler = SyncHandler;
+//! let mut client = Client::new(Config::default());
+//! let mut state = client.connect_sync(&mut handler, "127.0.0.1:7156").unwrap();
+//!
+//! // Receive from and tick the client connection
+//! client.receive_sync(&mut handler, &mut state);
+//! client.tick_sync(&mut handler, &mut state);
+//!
+//! // Handle received message and send new ones here
+//!
+//! // Send any pending messages via the connection
+//! client.send_sync(&mut handler, &mut state);
+//! ```
 #![deny(
     missing_docs,
     missing_debug_implementations, missing_copy_implementations,
