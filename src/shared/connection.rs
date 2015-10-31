@@ -477,13 +477,16 @@ impl Connection {
             socket.send_to(
                 &packet[..PACKET_HEADER_SIZE + remaining], *addr
 
-            ).unwrap();
+            ).expect("Failed to send compressed packet.");
 
             // Number of bytes actually sent
             remaining
 
         } else {
-            socket.send_to(&packet[..], *addr).unwrap();
+            socket.send_to(
+                &packet[..], *addr
+
+            ).expect("Failed to send packet.");
 
             // Number of bytes actually sent
             packet.len()

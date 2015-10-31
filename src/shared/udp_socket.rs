@@ -65,7 +65,7 @@ impl UdpSocket {
                             src,
                             buffer[..len].iter().cloned().collect()
 
-                        )).unwrap()
+                        )).ok();
                     }
 
                 }
@@ -118,9 +118,15 @@ impl Socket for UdpSocket {
 
             // Then send a empty packet to the reader socket
             // so its recv_from() unblocks
-            let socket = net::UdpSocket::bind("0.0.0.0:0").unwrap();
+            let socket = net::UdpSocket::bind("0.0.0.0:0").expect(
+                "Failed to create local socket for closure."
+            );
+
             let empty_packet: [u8; 0] = [0; 0];
-            socket.send_to(&empty_packet, self.local_addr().unwrap()).unwrap();
+            socket.send_to(
+                &empty_packet, self.local_addr().unwrap()
+
+            ).expect("Failed to send closure packet.");
 
             // Finally wait for the reader thread to exit cleanly
             reader_thread.join().unwrap();

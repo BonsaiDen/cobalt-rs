@@ -69,7 +69,7 @@
 //!
 //! let mut handler = GameServer;
 //! let mut server = Server::new(Config::default());
-//! server.bind(&mut handler, "127.0.0.1:7156").unwrap();
+//! server.bind(&mut handler, "127.0.0.1:7156").expect("Failed to bind server.");
 //! ```
 //!
 //! And the client version would look almost identical except for a few methods
@@ -119,7 +119,7 @@
 //!
 //! let mut handler = GameClient;
 //! let mut client = Client::new(Config::default());
-//! client.connect(&mut handler, "127.0.0.1:7156").unwrap();
+//! client.connect(&mut handler, "127.0.0.1:7156").expect("Failed to connect.");
 //! ```
 //!
 //! ## Integration with existing event loops
@@ -139,7 +139,11 @@
 //!
 //! let mut handler = SyncHandler;
 //! let mut client = Client::new(Config::default());
-//! let mut state = client.connect_sync(&mut handler, "127.0.0.1:7156").unwrap();
+//! let mut state = client.connect_sync(
+//!     &mut handler,
+//!     "127.0.0.1:7156"
+//!
+//! ).expect("Failed to connect.");
 //!
 //! // Receive from and tick the client connection
 //! client.receive_sync(&mut handler, &mut state);

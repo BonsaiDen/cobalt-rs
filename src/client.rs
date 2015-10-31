@@ -2,6 +2,7 @@ extern crate clock_ticks;
 
 use std::cmp;
 use std::thread;
+use std::time::Duration;
 use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
@@ -115,16 +116,15 @@ impl Client {
             //
             // Note: This will get swapped out with the more precise Duration
             // API once thread::sleep() is stable.
-            let spend = (clock_ticks::precise_time_ns() - begin) / 1000000;
-            thread::sleep_ms(
-                cmp::max(1000 / self.config.send_rate - spend as u32, 0)
-            );
+            let spend = clock_ticks::precise_time_ns() - begin;
+            thread::sleep(Duration::new(0, cmp::max(
+                1000000000 / self.config.send_rate - spend as u32,
+                0
+            )));
 
         }
 
-        self.close_sync(handler, &mut state).unwrap();
-
-        Ok(())
+        self.close_sync(handler, &mut state)
 
     }
 
@@ -184,7 +184,7 @@ impl Client {
 
     ) -> Result<ClientState<S>, Error> {
 
-        let peer_addr = try!(addr.to_socket_addrs()).next().unwrap();
+        let peer_addr = try!(addr.to_socket_addrs()).nth(0).unwrap();
 
         self.peer_address = Some(peer_addr);
         self.local_address = Some(try!(socket.local_addr()));

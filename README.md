@@ -1,8 +1,9 @@
 # cobalt [![Build Status](https://img.shields.io/travis/BonsaiDen/cobalt-rs.svg?style=flat-square)](https://travis-ci.org/BonsaiDen/cobalt-rs) [![Build status](https://img.shields.io/appveyor/ci/BonsaiDen/cobalt-rs.svg?style=flat-square)](https://ci.appveyor.com/project/BonsaiDen/cobalt-rs) [![Crates.io](https://img.shields.io/crates/v/cobalt.svg?style=flat-square)](https://crates.io/crates/cobalt) 
 
 A [rust](https://rust-lang.org/) based networking library which provides [virtual 
-connections over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) 
-featuring a messaging layer for sending un-/reliable and/or ordered messages.
+connections over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) .
+It also comes with a messaging layer for the sending of un-/reliable and/or 
+ordered messages.
 
 - [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt)
 

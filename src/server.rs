@@ -2,6 +2,7 @@ extern crate clock_ticks;
 
 use std::cmp;
 use std::thread;
+use std::time::Duration;
 use std::io::{Error, ErrorKind};
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -82,9 +83,13 @@ impl Server {
         // Reset stats
         self.statistics.reset();
 
-        // Create connection management collections
+        // List of dropped connections
         let mut dropped: Vec<ConnectionID> = Vec::new();
+
+        // Mappping of connections to their remote sender address
         let mut addresses: HashMap<ConnectionID, SocketAddr> = HashMap::new();
+
+        // Mapping of the actual connection objects
         let mut connections: HashMap<ConnectionID, Connection> = HashMap::new();
 
         // Invoke handler
@@ -105,30 +110,28 @@ impl Server {
                 match Connection::id_from_packet(&self.config, &packet) {
                     Some(id) => {
 
-                        if !connections.contains_key(&id) {
+                        // Retrieve or create a connection for the current
+                        // connection id also
+                        let connection = connections.entry(id).or_insert_with(|| {
 
-                            // In case of a unknown ConnectionID we create a
-                            // new connection and map it to the id
-                            let conn = Connection::new(
+                            // Map the intitial address which is used by the
+                            // connection
+                            addresses.insert(id, addr);
+
+                            Connection::new(
                                 self.config,
                                 socket.local_addr().unwrap(),
                                 addr,
                                 handler.rate_limiter(&self.config)
-                            );
+                            )
 
-                            connections.insert(id, conn);
+                        });
 
-                            // We also map the initial peer address to the id.
-                            // this is done in order to reliable track the
-                            // connection in case of address re-assignments by
-                            // network address translation.
-                            addresses.insert(id, addr);
-
-                        }
-
-                        // Check for changes in the peer address and update
-                        // the address to ID mapping
-                        let connection = connections.get_mut(&id).unwrap();
+                        // Map the current remote address of the connection to
+                        // the latest address that sent a packet for the
+                        // connection id in question. This is done in order to
+                        // work in situations were the remote port of a
+                        // connection is switched around by NAT.
                         if addr != connection.peer_addr() {
                             connection.set_peer_addr(addr);
                             addresses.remove(&id).unwrap();
@@ -189,10 +192,11 @@ impl Server {
 
             // Calculate spend time in current loop iteration and limit ticks
             // accordingly
-            let spend = (clock_ticks::precise_time_ns() - begin) / 1000000;
-            thread::sleep_ms(
-                cmp::max(1000 / self.config.send_rate - spend as u32, 0)
-            );
+            let spend = clock_ticks::precise_time_ns() - begin;
+            thread::sleep(Duration::new(0, cmp::max(
+                1000000000 / self.config.send_rate - spend as u32,
+                0
+            )));
 
         }
 
