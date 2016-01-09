@@ -111,19 +111,22 @@ impl Server {
                     Some(id) => {
 
                         // Retrieve or create a connection for the current
-                        // connection id also
+                        // connection id
                         let connection = connections.entry(id).or_insert_with(|| {
 
-                            // Map the intitial address which is used by the
-                            // connection
+                            // Also map the intitial address which is used by
+                            // the connection
                             addresses.insert(id, addr);
 
-                            Connection::new(
+                            let mut conn = Connection::new(
                                 self.config,
                                 socket.local_addr().unwrap(),
                                 addr,
                                 handler.rate_limiter(&self.config)
-                            )
+                            );
+
+                            conn.set_id(id);
+                            conn
 
                         });
 

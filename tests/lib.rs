@@ -206,8 +206,13 @@ impl Handler<Server> for MockServerHandler {
 
     fn tick_connections(
         &mut self, server: &mut Server,
-        _: &mut HashMap<ConnectionID, Connection>
+        connections: &mut HashMap<ConnectionID, Connection>
     ) {
+
+        // Ensure hashmap and connection object have the same id
+        for (id, conn) in connections.iter() {
+            assert_eq!(*id, conn.id());
+        }
 
         self.tick_connections_calls += 1;
 

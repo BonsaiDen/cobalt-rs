@@ -232,6 +232,11 @@ impl Connection {
         self.random_id
     }
 
+    /// Overrides the id of the connection.
+    pub fn set_id(&mut self, id: ConnectionID) {
+        self.random_id = id;
+    }
+
     /// Returns the current state of the connection.
     pub fn state(&self) -> ConnectionState {
         self.state
