@@ -1,11 +1,11 @@
 environment:
   matrix:
   - TARGET: x86_64-pc-windows-msvc
-    VERSION: 1.5.0
+    VERSION: nightly
   - TARGET: i686-pc-windows-msvc
-    VERSION: 1.5.0
+    VERSION: nightly
   - TARGET: i686-pc-windows-gnu
-    VERSION: 1.5.0
+    VERSION: nightly
 
 install:
   - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-${env:VERSION}-${env:TARGET}.exe"
