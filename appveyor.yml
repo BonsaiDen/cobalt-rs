@@ -1,31 +1,21 @@
-branches:
-  except:
-    - gh-pages
-
-platform:
-  - x64
-
 environment:
-  RUST_INSTALL_DIR: C:\Rust
   matrix:
-    - RUST_INSTALL_TRIPLE: i686-pc-windows-gnu
-      RUST_VERSION: 1.5.0
-    - RUST_INSTALL_TRIPLE: i686-pc-windows-gnu
-      RUST_VERSION: beta
-    - RUST_INSTALL_TRIPLE: x86_64-pc-windows-gnu
-      RUST_VERSION: 1.5.0
-    - RUST_INSTALL_TRIPLE: x86_64-pc-windows-gnu
-      RUST_VERSION: beta
+  - TARGET: x86_64-pc-windows-msvc
+    VERSION: 1.5.0
+  - TARGET: i686-pc-windows-msvc
+    VERSION: 1.5.0
+  - TARGET: i686-pc-windows-gnu
+    VERSION: 1.5.0
 
 install:
-  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-$Env:RUST_VERSION-$Env:RUST_INSTALL_TRIPLE.exe"
-  - cmd: rust-%RUST_VERSION%-%RUST_INSTALL_TRIPLE%.exe /VERYSILENT /NORESTART /COMPONENTS="rust,gcc,cargo" /DIR="%RUST_INSTALL_DIR%"
-  - cmd: SET PATH=%PATH%;%RUST_INSTALL_DIR%\bin
-  - rustc --version
-  - cargo --version
+  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-${env:VERSION}-${env:TARGET}.exe"
+  - rust-nightly-%TARGET%.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
+  - SET PATH=%PATH%;C:\Program Files (x86)\Rust\bin
+  - SET PATH=%PATH%;C:\MinGW\bin
+  - rustc -V
+  - cargo -V
 
 build: false
 test_script:
-  - cargo build --features all --verbose
   - cargo test --features all --verbose
 
