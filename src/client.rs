@@ -76,7 +76,7 @@ impl Client {
     ) -> Result<(), Error> {
 
         let socket = try!(UdpSocket::new(
-            "127.0.0.1:0",
+            "0.0.0.0:0",
             self.config.packet_max_size
         ));
 
@@ -161,7 +161,7 @@ impl Client {
     ) -> Result<ClientState<UdpSocket>, Error> {
 
         let socket = try!(UdpSocket::new(
-            "127.0.0.1:0",
+            "0.0.0.0:0",
             self.config.packet_max_size
         ));
 

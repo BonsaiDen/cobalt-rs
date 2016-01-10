@@ -1,6 +1,6 @@
 [package]
 name = "cobalt"
-version = "0.5.2"
+version = "0.5.3"
 authors = ["Ivo Wetzel <ivo.wetzel@googlemail.com>"]
 description="A low level, UDP based networking library."
 documentation = "https://bonsaiden.github.io/cobalt-rs/doc/cobalt"
