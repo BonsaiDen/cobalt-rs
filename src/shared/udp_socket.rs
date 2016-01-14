@@ -8,6 +8,7 @@
 use std::net;
 use std::fmt;
 use std::thread;
+use std::time::Duration;
 use std::io::Error;
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use super::super::traits::socket::Socket;
@@ -15,13 +16,6 @@ use super::super::traits::socket::Socket;
 /// Non-blocking abstraction over a UDP socket.
 ///
 /// The non-blocking behavior is implement by using a internal reader thread.
-///
-/// The implementation guarantees that the internal thread exits cleanly in
-/// case of either the sockets shutdown or it getting dropped.
-///
-/// This will be subject to change when support for socket timeouts lands in
-/// rust 1.4. We will most likely switch to a timeout based, synchronous read
-/// loop by then.
 pub struct UdpSocket {
     socket: net::UdpSocket,
     reader_thread: Option<thread::JoinHandle<()>>,
@@ -42,6 +36,7 @@ impl UdpSocket {
 
         // Clone the socket handle for use inside the reader thread
         let reader = try!(sender.try_clone());
+        try!(reader.set_read_timeout(Some(Duration::from_millis(10))));
 
         // Create communication channels
         let (s_udp, r_udp) = channel::<(net::SocketAddr, Vec<u8>)>();
@@ -56,25 +51,22 @@ impl UdpSocket {
                 buffer.push(0);
             }
 
-            loop  {
+            loop {
 
                 // Receive packets...
                 if let Ok((len, src)) = reader.recv_from(&mut buffer) {
 
-                    // ...until shutdown is received
-                    if let Ok(_) = r_close.try_recv() {
-                        break;
-
                     // Copy only the actual number of bytes and send them
                     // along with the source address
-                    } else {
-                        s_udp.send((
-                            src,
-                            buffer[..len].iter().cloned().collect()
+                    s_udp.send((
+                        src,
+                        buffer[..len].iter().cloned().collect()
 
-                        )).ok();
-                    }
+                    )).ok();
 
+                // ...until shutdown is received
+                } else if let Ok(_) = r_close.try_recv() {
+                    break;
                 }
 
             }
@@ -122,18 +114,6 @@ impl Socket for UdpSocket {
 
             // Notify the reader thread to exit
             self.close_sender.send(()).unwrap();
-
-            // Then send a empty packet to the reader socket
-            // so its recv_from() unblocks
-            let socket = net::UdpSocket::bind("0.0.0.0:0").expect(
-                "Failed to create local socket for closure."
-            );
-
-            let empty_packet: [u8; 0] = [0; 0];
-            socket.send_to(
-                &empty_packet, self.local_addr().unwrap()
-
-            ).expect("Failed to send closure packet.");
 
             // Finally wait for the reader thread to exit cleanly
             reader_thread.join().unwrap();
