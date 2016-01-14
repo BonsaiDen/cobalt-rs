@@ -2,16 +2,16 @@
 name = "cobalt"
 version = "0.6.0"
 authors = ["Ivo Wetzel <ivo.wetzel@googlemail.com>"]
-description="A low level, UDP based networking library."
+description="Low level, UDP based networking library."
 documentation = "https://bonsaiden.github.io/cobalt-rs/doc/cobalt"
 repository = "https://github.com/BonsaiDen/cobalt-rs.git"
 readme = "README.md"
 keywords = [ "virtual", "udp", "connection", "message", "queue"]
-license="MIT"
+license="MIT/Apache-2.0"
 
 [dependencies]
-clock_ticks = "~0.1.0"
-rand = "~0.3.13"
+clock_ticks = "0.1.0"
+rand = "0.3.13"
 
 [features]
 packet_handler_lost = []
