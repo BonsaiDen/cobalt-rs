@@ -33,7 +33,7 @@
 //!
 //!     fn bind(&mut self, server: &mut Server) {
 //!         // Since this is a runnable doc, we'll just exit right away
-//!         server.shutdown();
+//!         server.shutdown().unwrap();
 //!     }
 //!
 //!     fn tick_connections(
@@ -76,7 +76,6 @@
 //! having different names.
 //!
 //! ```
-//! use std::collections::HashMap;
 //! use cobalt::{Config, Connection, Handler, Client};
 //!
 //! struct GameClient;
@@ -84,13 +83,14 @@
 //!
 //!     fn connect(&mut self, client: &mut Client) {
 //!         // Since this is a runnable doc, we'll just exit right away
-//!         client.close();
+//!         client.close().unwrap();
 //!     }
 //!
 //!     fn tick_connection(&mut self, _: &mut Client, conn: &mut Connection) {
 //!
+//!         // Receive incoming state from the server
 //!         for msg in conn.received() {
-//!             // Receive state from server
+//!             println!("Received message {:?}", msg);
 //!         }
 //!
 //!         // Advance game state
@@ -107,11 +107,11 @@
 //!         // Request map list and settings from server
 //!     }
 //!
-//!     fn connection_failed(&mut self, client: &mut Client, _: &mut Connection) {
+//!     fn connection_failed(&mut self, _: &mut Client, _: &mut Connection) {
 //!         // Failed to connect to the server
 //!     }
 //!
-//!     fn connection_lost(&mut self, client: &mut Client, _: &mut Connection) {
+//!     fn connection_lost(&mut self, _: &mut Client, _: &mut Connection) {
 //!         // Inform the user
 //!     }
 //!
@@ -132,7 +132,7 @@
 //! implementation of the `Handler` trait.
 //!
 //! ```
-//! use cobalt::{Client, Config, Connection, ConnectionID, Handler};
+//! use cobalt::{Client, Config, Handler};
 //!
 //! struct SyncHandler;
 //! impl Handler<Client> for SyncHandler {}
@@ -146,7 +146,7 @@
 //! ).expect("Failed to connect.");
 //!
 //! // Receive from and tick the client connection
-//! client.receive_sync(&mut handler, &mut state);
+//! client.receive_sync(&mut handler, &mut state, 0);
 //! client.tick_sync(&mut handler, &mut state);
 //!
 //! // Handle received message and send new ones here

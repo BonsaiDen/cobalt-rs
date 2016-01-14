@@ -286,7 +286,9 @@ impl Connection {
 
     /// Receives a incoming UDP packet.
     pub fn receive_packet<O>(
-        &mut self, packet: Vec<u8>, owner: &mut O, handler: &mut Handler<O>
+        &mut self,
+        packet: Vec<u8>, tick_delay: u32,
+        owner: &mut O, handler: &mut Handler<O>
     ) {
 
         // Ignore any packets shorter then the header length
@@ -325,7 +327,7 @@ impl Connection {
                     self.acked_packets += 1;
                     self.smoothed_rtt = moving_average(
                         self.smoothed_rtt,
-                        (self.last_receive_time - ack.time) as f32
+                        (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay) as f32
                     );
                     ack.state = PacketState::Acked;
                     None
@@ -517,6 +519,9 @@ impl Connection {
 
         // Update packet statistics
         self.sent_packets += 1;
+
+        // Dismiss any pending, received messages
+        self.message_queue.dismiss();
 
         // Return number of bytes sent over the socket
         bytes_sent as u32

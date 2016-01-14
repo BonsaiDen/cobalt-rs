@@ -139,12 +139,12 @@ fn test_client_sync() {
     let peer_addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
     assert_eq!(state.peer_addr(), peer_addr);
 
-    client.receive_sync(&mut handler, &mut state);
+    client.receive_sync(&mut handler, &mut state, 0);
     client.tick_sync(&mut handler, &mut state);
     assert_eq!(handler.tick_count, 1);
     client.send_sync(&mut handler, &mut state);
 
-    client.receive_sync(&mut handler, &mut state);
+    client.receive_sync(&mut handler, &mut state, 0);
     client.tick_sync(&mut handler, &mut state);
     assert_eq!(handler.tick_count, 2);
     client.send_sync(&mut handler, &mut state);

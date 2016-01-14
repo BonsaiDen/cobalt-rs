@@ -107,8 +107,9 @@ impl Client {
             // Get current time to correct tick delay in order to achieve
             // a more stable tick rate
             let begin = clock_ticks::precise_time_ns();
+            let tick_delay = 1000000000 / self.config.send_rate;
 
-            self.receive_sync(handler, &mut state);
+            self.receive_sync(handler, &mut state, tick_delay / 1000000);
             self.tick_sync(handler, &mut state);
             self.send_sync(handler, &mut state);
 
@@ -118,7 +119,7 @@ impl Client {
             // API once thread::sleep() is stable.
             let spend = clock_ticks::precise_time_ns() - begin;
             thread::sleep(Duration::new(0, cmp::max(
-                1000000000 / self.config.send_rate - spend as u32,
+                tick_delay - spend as u32,
                 0
             )));
 
@@ -208,7 +209,9 @@ impl Client {
     /// Receives all currently buffered incoming packet from the underlying
     /// connection.
     pub fn receive_sync<S: Socket>(
-        &mut self, handler: &mut Handler<Client>, state: &mut ClientState<S>
+        &mut self,
+        handler: &mut Handler<Client>, state: &mut ClientState<S>,
+        tick_delay: u32
     ) {
 
         // Receive all incoming UDP packets from the specified remote
@@ -218,7 +221,9 @@ impl Client {
             while let Ok((addr, packet)) = state.socket.try_recv() {
                 if addr == state.peer_address {
                     bytes_received += packet.len();
-                    state.connection.receive_packet(packet, self, handler);
+                    state.connection.receive_packet(
+                        packet, tick_delay, self, handler
+                    );
                 }
             }
             self.statistics.set_bytes_received(bytes_received as u32);

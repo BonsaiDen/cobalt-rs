@@ -199,7 +199,7 @@ fn test_send_and_receive_packet() {
         2, // remote sequence number we confirm
         0, 0, 0, 3, // confirm the first two packets
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
 
     // Receive additional packet
@@ -210,7 +210,7 @@ fn test_send_and_receive_packet() {
         3, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     conn.receive_packet([
         1, 2, 3, 4,
@@ -219,7 +219,7 @@ fn test_send_and_receive_packet() {
         4, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     conn.receive_packet([
         1, 2, 3, 4,
@@ -228,7 +228,7 @@ fn test_send_and_receive_packet() {
         4, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Test Receive Ack Bitfield
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
@@ -236,7 +236,7 @@ fn test_send_and_receive_packet() {
 }
 
 #[test]
-fn test_send_and_receive_message() {
+fn test_send_and_receive_messages() {
 
     let mut conn = connection();
     let address = conn.peer_addr();
@@ -269,6 +269,17 @@ fn test_send_and_receive_message() {
 
             // World
             2, 1, 0, 5, 87, 111, 114, 108, 100
+
+        ].to_vec(),
+        [
+            1, 2, 3, 4,
+            (conn.id().0 >> 24) as u8,
+            (conn.id().0 >> 16) as u8,
+            (conn.id().0 >> 8) as u8,
+             conn.id().0 as u8,
+            1,
+            1,
+            0, 0, 0, 1
 
         ].to_vec()
     ]);
@@ -306,13 +317,10 @@ fn test_send_and_receive_message() {
         // Hello
         2, 0, 0, 5, 72, 101, 108, 108, 111
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Get received messages
-    let mut messages = Vec::new();
-    for msg in conn.received() {
-        messages.push(msg);
-    }
+    let messages: Vec<Vec<u8>> = conn.received().collect();
 
     assert_eq!(messages, vec![
         b"Foo".to_vec(),
@@ -321,6 +329,25 @@ fn test_send_and_receive_message() {
         b"Hello".to_vec(),
         b"World".to_vec()
     ]);
+
+    // Test Received dismissing
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0,
+        1,
+        1,
+        0, 0, 0, 0,
+
+        // Foo
+        0, 0, 0, 3, 70, 111, 111
+
+    ].to_vec(), 0, &mut owner, &mut handler);
+
+    // send_packet should dismiss any received messages which have not been fetched
+    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+
+    let messages: Vec<Vec<u8>> = conn.received().collect();
+    assert_eq!(messages.len(), 0);
 
 }
 
@@ -332,13 +359,13 @@ fn test_receive_invalid_packets() {
     let mut handler = MockOwnerHandler;
 
     // Empty packet
-    conn.receive_packet([].to_vec(), &mut owner, &mut handler);
+    conn.receive_packet([].to_vec(), 0, &mut owner, &mut handler);
 
     // Garbage packet
     conn.receive_packet([
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
 }
 
@@ -426,7 +453,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Expect RTT value to have moved by 10% of the overall roundtrip time
     assert!(conn.rtt() >= 40);
@@ -441,7 +468,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Third packet
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
@@ -453,7 +480,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Fourth packet
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
@@ -465,7 +492,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Fifth packet
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
@@ -477,7 +504,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Sixth packet
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
@@ -489,10 +516,51 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Expect RTT to have reduced by 10%
     assert!(conn.rtt() <= 40);
+
+}
+
+#[test]
+fn test_rtt_tick_correction() {
+
+    let mut conn = connection();
+    let address = conn.peer_addr();
+    let mut owner = MockOwner;
+    let mut handler = MockOwnerHandler;
+
+    let mut socket = MockSocket::new(vec![
+        [
+            1, 2, 3, 4,
+            (conn.id().0 >> 24) as u8,
+            (conn.id().0 >> 16) as u8,
+            (conn.id().0 >> 8) as u8,
+             conn.id().0 as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ].to_vec()
+    ]);
+
+    assert_eq!(conn.rtt(), 0);
+
+    // First packet
+    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    thread::sleep_ms(500);
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0,
+        0,
+        0, // confirm the packet above
+        0, 0,
+        0, 0
+
+    ].to_vec(), 500, &mut owner, &mut handler);
+
+    // Expect RTT value to have been corrected by passed in tick delay
+    assert!(conn.rtt() <= 10);
 
 }
 
@@ -590,7 +658,7 @@ fn test_packet_loss() {
         0, 2, 0, 0, // Set ack seq to non-0 so we trigger the packet loss
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // RTT should be left untouched the lost packet
     assert_eq!(conn.rtt(), 0);
@@ -612,7 +680,7 @@ fn test_packet_loss() {
         0, 1, 0, 0,
         0, 0
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // But packet loss should now go down
     assert_eq!(conn.packet_loss(), 50.0);
@@ -712,7 +780,7 @@ fn test_packet_compression() {
         0, 0
         // Decompression handler will inject the packet data here
 
-    ].to_vec(), &mut owner, &mut handler);
+    ].to_vec(), 0, &mut owner, &mut handler);
 
     // Decompress handler should have been called once
     assert_eq!(handler.packet_decompress_calls, 1);

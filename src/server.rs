@@ -101,6 +101,7 @@ impl Server {
             // Get current time to correct tick delay in order to achieve
             // a more stable tick rate
             let begin = clock_ticks::precise_time_ns();
+            let tick_delay = 1000000000 / self.config.send_rate;
 
             // Receive all incoming UDP packets to our local address
             let mut bytes_received = 0;
@@ -146,7 +147,9 @@ impl Server {
 
                         // Then feed the packet into the connection object for
                         // parsing
-                        connection.receive_packet(packet, self, handler);
+                        connection.receive_packet(
+                            packet, tick_delay / 1000000, self, handler
+                        );
 
                     },
                     None => { /* Ignore any invalid packets */ }

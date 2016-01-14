@@ -135,6 +135,12 @@ impl MessageQueue {
         MessageIterator { messages: &mut self.recv_queue }
     }
 
+    /// Clears the queue of received messages, dismissing any messages which
+    /// have not been fetched via `MessageQueue::received()`.
+    pub fn dismiss(&mut self) {
+        self.recv_queue.clear();
+    }
+
     /// Pushes a message of the specified `kind` along with its `data` into the
     /// queue. The message will eventually get serialized via
     /// `MessageQueue::send_packet()`.
