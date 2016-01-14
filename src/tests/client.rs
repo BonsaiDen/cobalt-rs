@@ -162,6 +162,32 @@ fn test_client_sync() {
 }
 
 #[test]
+fn test_client_sync_set_config() {
+
+    let config = Config {
+        send_rate: 10,
+        .. Config::default()
+    };
+
+    let mut handler = MockSyncClientHandler {
+        connect_count: 0,
+        tick_count: 0,
+        close_count: 0
+    };
+
+    // TODO improve sync client tests
+    let mut client = Client::new(config);
+    let mut state = client.connect_sync(&mut handler, "127.0.0.1:12345").unwrap();
+
+    client.set_config(Config {
+        send_rate: 30,
+        .. Config::default()
+
+    }, &mut state);
+
+}
+
+#[test]
 fn test_client_stats() {
 
     let config = Config {

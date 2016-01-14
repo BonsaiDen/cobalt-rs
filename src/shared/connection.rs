@@ -276,6 +276,12 @@ impl Connection {
         self.peer_address = peer_addr;
     }
 
+    /// Overrides the connection's existing configuration.
+    pub fn set_config(&mut self, config: Config) {
+        self.config = config;
+        self.message_queue.set_config(config);
+    }
+
     /// Sends a message of the specified `kind` along with its `payload` over
     /// the connection.
     ///

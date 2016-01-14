@@ -5,6 +5,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+use super::super::Config;
 
 /// A structure containing stats data average of the course of one second.
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -44,8 +45,8 @@ pub struct StatsCollector {
     /// Internal tick value
     tick: u32,
 
-    /// Ticks per second over which the data is averaged
-    ticks_per_second: u32,
+    /// The collectors's configuration
+    config: Config,
 
     /// Internal stat buckets for O(1) average calculation
     buckets: Vec<Stats>,
@@ -59,11 +60,11 @@ impl StatsCollector {
 
     /// Creates a new stats object which averages incoming data over the given
     /// number of ticks per second.
-    pub fn new(ticks_per_second: u32) -> StatsCollector {
+    pub fn new(config: Config) -> StatsCollector {
         StatsCollector {
             tick: 0,
-            ticks_per_second: ticks_per_second + 1,
-            buckets: (0..ticks_per_second + 1).map(|_| {
+            config: config,
+            buckets: (0..config.send_rate + 1).map(|_| {
                 Stats::default()
 
             }).collect::<Vec<Stats>>(),
@@ -71,9 +72,18 @@ impl StatsCollector {
         }
     }
 
+    /// Overrides the collector's existing configuration.
+    pub fn set_config(&mut self, config: Config) {
+        self.config = config;
+        self.buckets = (0..config.send_rate + 1).map(|_| {
+            Stats::default()
+
+        }).collect::<Vec<Stats>>()
+    }
+
     /// Sets the number of bytes sent for the current tick.
     pub fn set_bytes_sent(&mut self, bytes: u32) {
-        let old_index = (self.tick as i32 + 1) % self.ticks_per_second as i32;
+        let old_index = (self.tick as i32 + 1) % (self.config.send_rate + 1) as i32;
         let old_bytes = self.buckets.get(old_index as usize).unwrap().bytes_sent;
         self.averages.bytes_sent = (self.averages.bytes_sent - old_bytes) + bytes;
         self.buckets.get_mut(self.tick as usize).unwrap().bytes_sent = bytes;
@@ -81,7 +91,7 @@ impl StatsCollector {
 
     /// Sets the number of bytes received for the current tick.
     pub fn set_bytes_received(&mut self, bytes: u32) {
-        let old_index = (self.tick as i32 + 1) % self.ticks_per_second as i32;
+        let old_index = (self.tick as i32 + 1) % (self.config.send_rate + 1) as i32;
         let old_bytes = self.buckets.get(old_index as usize).unwrap().bytes_received;
         self.averages.bytes_received = (self.averages.bytes_received - old_bytes) + bytes;
         self.buckets.get_mut(self.tick as usize).unwrap().bytes_received = bytes;
@@ -89,7 +99,7 @@ impl StatsCollector {
 
     /// Steps the internal tick value used for average calculation.
     pub fn tick(&mut self) {
-        self.tick = (self.tick + 1) % self.ticks_per_second;
+        self.tick = (self.tick + 1) % (self.config.send_rate + 1);
     }
 
     /// Returns the calculated averages from the last tick.

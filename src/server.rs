@@ -35,7 +35,7 @@ impl Server {
             closed: false,
             config: config,
             local_address: None,
-            statistics: StatsCollector::new(config.send_rate)
+            statistics: StatsCollector::new(config)
         }
     }
 

@@ -47,7 +47,7 @@ impl Client {
             config: config,
             peer_address: None,
             local_address: None,
-            statistics: StatsCollector::new(config.send_rate)
+            statistics: StatsCollector::new(config)
         }
     }
 
@@ -64,6 +64,13 @@ impl Client {
     /// Returns statistics (i.e. bandwidth usage) for the last second.
     pub fn stats(&mut self) -> Stats {
         self.statistics.average()
+    }
+
+    /// Overrides the client's existing configuration.
+    pub fn set_config<S: Socket>(&mut self, config: Config, state: &mut ClientState<S>) {
+        self.config = config;
+        self.statistics.set_config(config);
+        state.set_config(config);
     }
 
     // Asynchronous, blocking API ---------------------------------------------
@@ -341,6 +348,11 @@ impl <S: Socket>ClientState< S> {
     /// underlying connection.
     pub fn peer_addr(&self) -> SocketAddr {
         self.connection.peer_addr()
+    }
+
+    /// Overrides the configuration of the underlying connection.
+    pub fn set_config(&mut self, config: Config) {
+        self.connection.set_config(config);
     }
 
 }

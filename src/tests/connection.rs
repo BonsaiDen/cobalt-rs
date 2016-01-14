@@ -43,6 +43,15 @@ fn test_create() {
 }
 
 #[test]
+fn test_set_tick_rate() {
+    let mut conn = connection();
+    conn.set_config(Config {
+        send_rate: 10,
+        .. Config::default()
+    });
+}
+
+#[test]
 fn test_close() {
     let mut conn = connection();
     conn.close();

@@ -137,6 +137,11 @@ impl MessageQueue {
         }
     }
 
+    /// Overrides the queue's existing configuration.
+    pub fn set_config(&mut self, config: Config) {
+        self.config = config;
+    }
+
     /// Returns a consuming iterator over all received messages in the queue.
     pub fn received(&mut self) -> MessageIterator {
         MessageIterator { messages: &mut self.recv_queue }
