@@ -205,11 +205,12 @@ impl Server {
 
             // Calculate spend time in current loop iteration and limit ticks
             // accordingly
-            let spend = clock_ticks::precise_time_ns() - begin;
-            thread::sleep(Duration::new(0, cmp::max(
-                1000000000 / self.config.send_rate - spend as u32,
-                0
-            )));
+            thread::sleep(
+                Duration::new(0, tick_delay - cmp::min(
+                    (clock_ticks::precise_time_ns() - begin) as u32,
+                    tick_delay
+                ))
+            );
 
         }
 
