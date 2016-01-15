@@ -23,10 +23,7 @@ impl Handler<Client> for MockClientHandler {
         self.last_tick_time = precise_time_ms();
     }
 
-    fn tick_connection(
-        &mut self, client: &mut Client,
-        _: &mut Connection
-    ) {
+    fn tick_connection(&mut self, client: &mut Client, _: &mut Connection) {
 
         // Accumulate time so we can check that the artificial delay
         // was correct for by the servers tick loop
@@ -192,8 +189,8 @@ fn test_client_stats() {
 
     let config = Config {
         send_rate: 20,
-        connection_init_threshold: 1500,
-        connection_drop_threshold: 2500,
+        connection_init_threshold: 500000,
+        connection_drop_threshold: 500000,
         .. Config::default()
     };
 
