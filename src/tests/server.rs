@@ -52,7 +52,12 @@ impl Handler<Server> for DelayServerHandler {
         }
 
         // Fake some load inside of the tick handler
+        let before = precise_time_ms();
         thread::sleep_ms(75);
+
+        // Compensate for slow timers
+        let spend = (precise_time_ms() - before) as i32;
+        self.accumulated -= spend - 75;
 
     }
 

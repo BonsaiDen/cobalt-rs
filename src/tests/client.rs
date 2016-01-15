@@ -14,7 +14,7 @@ use super::super::{Client, Connection, Config, Handler, MessageKind, Stats};
 struct MockClientHandler {
     pub last_tick_time: u32,
     pub tick_count: u32,
-    pub accumulated: u32
+    pub accumulated: i32
 }
 
 impl Handler<Client> for MockClientHandler {
@@ -28,7 +28,7 @@ impl Handler<Client> for MockClientHandler {
         // Accumulate time so we can check that the artificial delay
         // was correct for by the servers tick loop
         if self.tick_count > 1 {
-            self.accumulated += precise_time_ms() - self.last_tick_time;
+            self.accumulated += (precise_time_ms() - self.last_tick_time) as i32;
         }
 
         self.last_tick_time = precise_time_ms();
@@ -39,7 +39,12 @@ impl Handler<Client> for MockClientHandler {
         }
 
         // Fake some load inside of the tick handler
+        let before = precise_time_ms();
         thread::sleep_ms(75);
+
+        // Compensate for slow timers
+        let spend = (precise_time_ms() - before) as i32;
+        self.accumulated -= spend - 75;
 
     }
 
