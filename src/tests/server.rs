@@ -24,7 +24,7 @@ fn precise_time_ms() -> u32 {
 struct DelayServerHandler {
     pub last_tick_time: u32,
     pub tick_count: u32,
-    pub accumulated: u32
+    pub accumulated: i32
 }
 
 impl Handler<Server> for DelayServerHandler {
@@ -41,7 +41,7 @@ impl Handler<Server> for DelayServerHandler {
         // Accumulate time so we can check that the artificial delay
         // was correct for by the servers tick loop
         if self.tick_count > 1 {
-            self.accumulated += precise_time_ms() - self.last_tick_time;
+            self.accumulated += (precise_time_ms() - self.last_tick_time) as i32;
         }
 
         self.last_tick_time = precise_time_ms();
