@@ -58,11 +58,7 @@ impl UdpSocket {
 
                     // Copy only the actual number of bytes and send them
                     // along with the source address
-                    s_udp.send((
-                        src,
-                        buffer[..len].iter().cloned().collect()
-
-                    )).ok();
+                    s_udp.send((src, buffer[..len].to_vec())).ok();
 
                 // ...until shutdown is received
                 } else if let Ok(_) = r_close.try_recv() {
