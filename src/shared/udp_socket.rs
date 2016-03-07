@@ -7,6 +7,7 @@
 // except according to those terms.
 use std::net;
 use std::fmt;
+use std::iter;
 use std::thread;
 use std::time::Duration;
 use std::io::Error;
@@ -36,6 +37,8 @@ impl UdpSocket {
 
         // Clone the socket handle for use inside the reader thread
         let reader = try!(sender.try_clone());
+
+        // Configure read timeout so we can eventually exit our receive loop
         try!(reader.set_read_timeout(Some(Duration::from_millis(10))));
 
         // Create communication channels
@@ -46,11 +49,7 @@ impl UdpSocket {
         let reader_thread = thread::spawn(move|| {
 
             // Allocate buffer for the maximum packet size
-            let mut buffer = Vec::with_capacity(max_packet_size);
-            for _ in 0..max_packet_size {
-                buffer.push(0);
-            }
-
+            let mut buffer: Vec<u8> = iter::repeat(0).take(max_packet_size).collect();
             loop {
 
                 // Receive packets...
