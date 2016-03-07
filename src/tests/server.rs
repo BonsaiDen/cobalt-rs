@@ -10,6 +10,7 @@ extern crate clock_ticks;
 use std::net;
 use std::thread;
 use std::io::Error;
+use std::time::Duration;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::net::ToSocketAddrs;
@@ -53,7 +54,7 @@ impl Handler<Server> for DelayServerHandler {
 
         // Fake some load inside of the tick handler
         let before = precise_time_ms();
-        thread::sleep_ms(75);
+        thread::sleep(Duration::from_millis(75));
 
         // Compensate for slow timers
         let spend = (precise_time_ms() - before) as i32;

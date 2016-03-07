@@ -7,6 +7,7 @@
 // except according to those terms.
 use std::net;
 use std::thread;
+use std::time::Duration;
 use std::io::{Error, ErrorKind};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
@@ -460,7 +461,7 @@ fn test_rtt() {
 
     // First packet
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
-    thread::sleep_ms(500);
+    thread::sleep(Duration::from_millis(500));
     conn.receive_packet([
         1, 2, 3, 4,
         0, 0, 0, 0,
@@ -564,7 +565,7 @@ fn test_rtt_tick_correction() {
 
     // First packet
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
-    thread::sleep_ms(500);
+    thread::sleep(Duration::from_millis(500));
     conn.receive_packet([
         1, 2, 3, 4,
         0, 0, 0, 0,
@@ -580,6 +581,7 @@ fn test_rtt_tick_correction() {
 
 }
 
+#[cfg(feature = "packet_handler_lost")]
 #[test]
 fn test_packet_loss() {
 
@@ -665,7 +667,7 @@ fn test_packet_loss() {
     assert_eq!(conn.packet_loss(), 0.0);
 
     // Wait a bit so the packets will definitely get dropped
-    thread::sleep_ms(20);
+    thread::sleep_ms(Duration::from_millis(20));
 
     // Now receive a packet and check for the lost packets
     conn.receive_packet([
@@ -703,6 +705,7 @@ fn test_packet_loss() {
 
 }
 
+#[cfg(feature = "packet_handler_compress")]
 #[test]
 fn test_packet_compression() {
 

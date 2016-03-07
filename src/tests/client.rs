@@ -8,6 +8,7 @@
 extern crate clock_ticks;
 
 use std::thread;
+use std::time::Duration;
 use std::net::SocketAddr;
 use super::super::{Client, Connection, Config, Handler, MessageKind, Stats};
 
@@ -40,7 +41,7 @@ impl Handler<Client> for MockClientHandler {
 
         // Fake some load inside of the tick handler
         let before = precise_time_ms();
-        thread::sleep_ms(75);
+        thread::sleep(Duration::from_millis(75));
 
         // Compensate for slow timers
         let spend = (precise_time_ms() - before) as i32;
@@ -160,6 +161,8 @@ fn test_client_sync() {
 
     client.close_sync(&mut handler, &mut state).unwrap();
     assert_eq!(handler.close_count, 1);
+
+    // TODO test send / reset from state
 
 }
 
