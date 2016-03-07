@@ -10,6 +10,7 @@ extern crate clock_ticks;
 
 use std::cmp;
 use std::net::SocketAddr;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use super::message_queue::{MessageQueue, MessageIterator};
 use super::super::traits::socket::Socket;
@@ -77,6 +78,10 @@ pub enum ConnectionState {
 /// conflicting ack sequences and message data - both will get dropped shortly.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct ConnectionID(pub u32);
+
+
+/// Type alias for connection mappings.
+pub type ConnectionMap = HashMap<ConnectionID, Connection>;
 
 /// Implementation of a reliable, virtual connection logic.
 #[derive(Debug)]
