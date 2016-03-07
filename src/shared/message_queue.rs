@@ -66,6 +66,7 @@ impl PartialOrd for Message {
 }
 
 /// Consuming iterator over the received messages of a `MessageQueue`.
+#[derive(Debug)]
 pub struct MessageIterator<'a> {
     messages: &'a mut VecDeque<Message>
 }
