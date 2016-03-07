@@ -438,7 +438,7 @@ fn write_message(
             packet.push(message.order as u8);
             packet.push((message.size >> 8) as u8);
             packet.push(message.size as u8);
-            packet.extend(message.data.iter().cloned());
+            packet.extend_from_slice(&message.data[..]);
             *written += required;
             true
         }
