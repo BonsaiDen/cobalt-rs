@@ -192,7 +192,12 @@ mod traits {
 pub use shared::config::Config;
 
 #[doc(inline)]
-pub use shared::connection::{Connection, ConnectionID, ConnectionState};
+pub use shared::connection::{
+    Connection,
+    ConnectionID,
+    ConnectionMap,
+    ConnectionState
+};
 
 #[doc(inline)]
 pub use shared::message_queue::MessageKind;
