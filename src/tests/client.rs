@@ -137,7 +137,6 @@ fn test_client_sync() {
         close_count: 0
     };
 
-    // TODO improve sync client tests
     let mut client = Client::new(config);
     let mut state = client.connect_sync(&mut handler, "127.0.0.1:12345").unwrap();
     assert_eq!(handler.tick_count, 0);
@@ -145,6 +144,10 @@ fn test_client_sync() {
 
     assert_eq!(state.rtt(), 0);
     assert_eq!(state.packet_loss(), 0.0);
+    assert_eq!(state.stats(), Stats {
+        bytes_sent: 0,
+        bytes_received: 0
+    });
 
     let peer_addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
     assert_eq!(state.peer_addr(), peer_addr);
@@ -152,17 +155,34 @@ fn test_client_sync() {
     client.receive_sync(&mut handler, &mut state, 0);
     client.tick_sync(&mut handler, &mut state);
     assert_eq!(handler.tick_count, 1);
+
     client.send_sync(&mut handler, &mut state);
+    assert_eq!(state.stats(), Stats {
+        bytes_sent: 14,
+        bytes_received: 0
+    });
 
     client.receive_sync(&mut handler, &mut state, 0);
     client.tick_sync(&mut handler, &mut state);
     assert_eq!(handler.tick_count, 2);
+
     client.send_sync(&mut handler, &mut state);
+    assert_eq!(state.stats(), Stats {
+        bytes_sent: 28,
+        bytes_received: 0
+    });
+
+    state.send(MessageKind::Instant, b"Hello World".to_vec());
+    client.send_sync(&mut handler, &mut state);
+    assert_eq!(state.stats(), Stats {
+        bytes_sent: 57,
+        bytes_received: 0
+    });
+
+    state.reset();
 
     client.close_sync(&mut handler, &mut state).unwrap();
     assert_eq!(handler.close_count, 1);
-
-    // TODO test send / reset from state
 
 }
 
@@ -180,7 +200,6 @@ fn test_client_sync_set_config() {
         close_count: 0
     };
 
-    // TODO improve sync client tests
     let mut client = Client::new(config);
     let mut state = client.connect_sync(&mut handler, "127.0.0.1:12345").unwrap();
 

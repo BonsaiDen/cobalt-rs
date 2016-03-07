@@ -297,8 +297,6 @@ impl MessageQueue {
             let mut matches = true;
             while matches {
 
-                // TODO refactor
-
                 // Check if the order id of the minimal item in the heap
                 // matches the expected next remote order id
                 matches = if let Some(msg) = self.o_recv_heap.peek() {

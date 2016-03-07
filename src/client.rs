@@ -15,7 +15,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::stats::{StatsCollector, Stats};
 use shared::udp_socket::UdpSocket;
-use super::{Config, Connection, Handler};
+use super::{Config, Connection, Handler, MessageKind};
 
 /// Implementation of a single-server client with handler based event dispatch.
 ///
@@ -127,10 +127,11 @@ impl Client {
             self.tick_sync(handler, &mut state);
             self.send_sync(handler, &mut state);
 
-            // Limit ticks per second to the configured amount
-            //
-            // Note: This will get swapped out with the more precise Duration
-            // API once thread::sleep() is stable.
+            // Calculate spend time in current loop iteration and limit ticks
+            // accordingly.
+
+            // TODO: In case we spent more time than the tick_delay, make the
+            // next tick faster in order to compensate.
             thread::sleep(
                 Duration::new(0, tick_delay - cmp::min(
                     (clock_ticks::precise_time_ns() - begin) as u32,
@@ -201,16 +202,17 @@ impl Client {
     ) -> Result<ClientState<S>, Error> {
 
         let peer_addr = try!(addr.to_socket_addrs()).nth(0).unwrap();
+        let local_addr = try!(socket.local_addr());
 
         self.peer_address = Some(peer_addr);
-        self.local_address = Some(try!(socket.local_addr()));
+        self.local_address = Some(local_addr);
         self.statistics.reset();
         self.running = true;
         self.closed = false;
 
         let connection = Connection::new(
             self.config,
-            socket.local_addr().unwrap(),
+            local_addr,
             peer_addr,
             handler.rate_limiter(&self.config)
         );
@@ -265,6 +267,7 @@ impl Client {
             );
             self.statistics.set_bytes_sent(bytes_sent);
             self.statistics.tick();
+            state.stats = self.statistics.average();
         }
     }
 
@@ -304,7 +307,8 @@ impl Client {
 pub struct ClientState<S: Socket> {
     socket: S,
     connection: Connection,
-    peer_address: SocketAddr
+    peer_address: SocketAddr,
+    stats: Stats
 }
 
 impl <S: Socket>ClientState< S> {
@@ -322,21 +326,31 @@ impl <S: Socket>ClientState< S> {
         ClientState {
             socket: socket,
             connection: connection,
-            peer_address: peer_addr
+            peer_address: peer_addr,
+            stats: Stats {
+                bytes_sent: 0,
+                bytes_received: 0
+            }
         }
     }
 
-    /// Returns the average roundtrip time for the clients underlying
+    /// Returns the average roundtrip time for this client's underlying
     /// connection.
     pub fn rtt(&self) -> u32 {
         self.connection.rtt()
     }
 
     /// Returns the percent of packets that were sent and never acknowledged
-    /// over the total number of packets that have been send across the
+    /// over the total number of packets that have been send across this
     /// client's underlying connection.
     pub fn packet_loss(&self) -> f32 {
         self.connection.packet_loss()
+    }
+
+    /// Returns statistics (i.e. bandwidth usage) for the last second, of this
+    /// client'sunderlying connection.
+    pub fn stats(&self) -> Stats {
+        self.stats
     }
 
     /// Returns the socket address for the local end of this client's
@@ -351,9 +365,20 @@ impl <S: Socket>ClientState< S> {
         self.connection.peer_addr()
     }
 
-    /// Overrides the configuration of the underlying connection.
+    /// Overrides the configuration of this client's underlying connection.
     pub fn set_config(&mut self, config: Config) {
         self.connection.set_config(config);
+    }
+
+    /// Sends a message of the specified `kind` along with its `payload` over
+    /// this client's underlying connection.
+    pub fn send(&mut self, kind: MessageKind, payload: Vec<u8>) {
+        self.connection.send(kind, payload);
+    }
+
+    /// Resets this client's underlying connection state.
+    pub fn reset(&mut self) {
+        self.connection.reset();
     }
 
 }
