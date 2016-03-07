@@ -85,7 +85,8 @@ impl Server {
     ) -> Result<(), Error> {
 
         // Store bound socket address
-        self.local_address = Some(try!(socket.local_addr()));
+        let local_addr = try!(socket.local_addr());
+        self.local_address = Some(local_addr);
 
         // Reset stats
         self.statistics.reset();
@@ -128,7 +129,7 @@ impl Server {
 
                             let mut conn = Connection::new(
                                 self.config,
-                                socket.local_addr().unwrap(),
+                                local_addr,
                                 addr,
                                 handler.rate_limiter(&self.config)
                             );
@@ -145,7 +146,7 @@ impl Server {
                         // connection is switched around by NAT.
                         if addr != connection.peer_addr() {
                             connection.set_peer_addr(addr);
-                            addresses.remove(&id).unwrap();
+                            addresses.remove(&id);
                             addresses.insert(id, addr);
                         }
 
@@ -196,7 +197,7 @@ impl Server {
 
                 for id in dropped.iter() {
                     connections.remove(id).unwrap().reset();
-                    addresses.remove(id).unwrap();
+                    addresses.remove(id);
                 }
 
                 dropped.clear();
@@ -205,6 +206,9 @@ impl Server {
 
             // Calculate spend time in current loop iteration and limit ticks
             // accordingly
+
+            // TODO: In case we spent more time than the tick_delay, make the
+            // next tick faster in order to compensate.
             thread::sleep(
                 Duration::new(0, tick_delay - cmp::min(
                     (clock_ticks::precise_time_ns() - begin) as u32,
