@@ -84,17 +84,17 @@ impl StatsCollector {
     /// Sets the number of bytes sent for the current tick.
     pub fn set_bytes_sent(&mut self, bytes: u32) {
         let old_index = (self.tick as i32 + 1) % (self.config.send_rate + 1) as i32;
-        let old_bytes = self.buckets.get(old_index as usize).unwrap().bytes_sent;
+        let old_bytes = self.buckets[old_index as usize].bytes_sent;
         self.averages.bytes_sent = (self.averages.bytes_sent - old_bytes) + bytes;
-        self.buckets.get_mut(self.tick as usize).unwrap().bytes_sent = bytes;
+        self.buckets[self.tick as usize].bytes_sent = bytes;
     }
 
     /// Sets the number of bytes received for the current tick.
     pub fn set_bytes_received(&mut self, bytes: u32) {
         let old_index = (self.tick as i32 + 1) % (self.config.send_rate + 1) as i32;
-        let old_bytes = self.buckets.get(old_index as usize).unwrap().bytes_received;
+        let old_bytes = self.buckets[old_index as usize].bytes_received;
         self.averages.bytes_received = (self.averages.bytes_received - old_bytes) + bytes;
-        self.buckets.get_mut(self.tick as usize).unwrap().bytes_received = bytes;
+        self.buckets[self.tick as usize].bytes_received = bytes;
     }
 
     /// Steps the internal tick value used for average calculation.
