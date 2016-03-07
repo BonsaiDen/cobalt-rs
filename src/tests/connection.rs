@@ -667,7 +667,7 @@ fn test_packet_loss() {
     assert_eq!(conn.packet_loss(), 0.0);
 
     // Wait a bit so the packets will definitely get dropped
-    thread::sleep_ms(Duration::from_millis(20));
+    thread::sleep(Duration::from_millis(20));
 
     // Now receive a packet and check for the lost packets
     conn.receive_packet([
