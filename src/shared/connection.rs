@@ -504,8 +504,8 @@ impl Connection {
 
             ).expect(&format!("Failed to send compressed packet to {:?}", addr));
 
-            // Number of bytes actually sent
-            remaining
+            // Number of all bytes sent
+            remaining + PACKET_HEADER_SIZE
 
         } else {
             socket.send_to(
@@ -513,7 +513,7 @@ impl Connection {
 
             ).expect(&format!("Failed to send packet to {:?}", addr));
 
-            // Number of bytes actually sent
+            // Number of all bytes sent
             packet.len()
         };
 

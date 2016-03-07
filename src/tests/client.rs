@@ -207,7 +207,7 @@ fn test_client_stats() {
     client.connect(&mut handler, "127.0.0.1:12346").unwrap();
 
     assert_eq!(client.stats(), Stats {
-        bytes_sent: 300,
+        bytes_sent: 580,
         bytes_received: 0
     });
 
