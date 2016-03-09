@@ -1,4 +1,4 @@
-# cobalt [![Build Status](https://img.shields.io/travis/BonsaiDen/cobalt-rs.svg?style=flat-square)](https://travis-ci.org/BonsaiDen/cobalt-rs) [![Build status](https://img.shields.io/appveyor/ci/BonsaiDen/cobalt-rs.svg?style=flat-square)](https://ci.appveyor.com/project/BonsaiDen/cobalt-rs) [![Crates.io](https://img.shields.io/crates/v/cobalt.svg?style=flat-square)](https://crates.io/crates/cobalt) 
+# cobalt [![Build Status](https://img.shields.io/travis/BonsaiDen/cobalt-rs.svg?style=flat-square)](https://travis-ci.org/BonsaiDen/cobalt-rs) [![Build status](https://img.shields.io/appveyor/ci/BonsaiDen/cobalt-rs.svg?style=flat-square)](https://ci.appveyor.com/project/BonsaiDen/cobalt-rs) [![Crates.io](https://img.shields.io/crates/v/cobalt.svg?style=flat-square)](https://crates.io/crates/cobalt) [![Clippy Linting Result](http://clippy.bashy.io/github/BonsaiDen/cobalt-rs/master/badge.svg?style=flat-square)](http://clippy.bashy.io/github/BonsaiDen/cobalt-rs/master/log)
 
 A [rust](https://rust-lang.org/) based networking library which provides [virtual 
 connections over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) .
