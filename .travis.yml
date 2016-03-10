@@ -2,12 +2,19 @@ language: rust
 rust:
   - stable
   - beta
-  - nightly
+
+env:
+  - FEATURES="all"
+
 matrix:
   allow_failure:
     - rust: nightly
 
+  include:
+    - rust: nightly
+      env: FEATURES="all lint"
+
 script:
-  - cargo build --features all --verbose
-  - cargo test --features all --verbose
+  - cargo build --features "${FEATURES}" --verbose
+  - cargo test --features "${FEATURES}" --verbose
 
