@@ -66,19 +66,17 @@ impl RateLimiter for BinaryRateLimiter {
     fn update(&mut self, rtt: u32, _: f32) {
 
         // Check current network conditions
-        let conditions = match rtt <= self.rtt_threshold {
-            true => {
-                // Keep track of the time we are in good mode
-                self.good_time_duration += precise_time_ms() - self.last_good_time;
-                self.last_good_time = precise_time_ms();
-                Mode::Good
-            },
-            false => {
-                // Remember the last time we were in bad mode
-                self.last_bad_time = precise_time_ms();
-                self.good_time_duration = 0;
-                Mode::Bad
-            }
+        let conditions = if rtt <= self.rtt_threshold {
+            // Keep track of the time we are in good mode
+            self.good_time_duration += precise_time_ms() - self.last_good_time;
+            self.last_good_time = precise_time_ms();
+            Mode::Good
+
+        } else {
+            // Remember the last time we were in bad mode
+            self.last_bad_time = precise_time_ms();
+            self.good_time_duration = 0;
+            Mode::Bad
         };
 
         match self.mode  {
@@ -157,7 +155,7 @@ impl RateLimiter for BinaryRateLimiter {
 
     fn should_send(&self ) -> bool {
         // Send all packets when in good mode and about a third when in bad mode
-        self.congested() == false || self.tick == 0
+        !self.congested() || self.tick == 0
     }
 
     fn reset(&mut self) {

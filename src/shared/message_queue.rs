@@ -242,8 +242,9 @@ impl MessageQueue {
     pub fn receive_packet(&mut self, packet: &[u8]) {
         for m in messages_from_packet(packet) {
             match m.kind {
-                MessageKind::Instant => self.recv_queue.push_back(m),
-                MessageKind::Reliable => self.recv_queue.push_back(m),
+                MessageKind::Instant | MessageKind::Reliable => {
+                    self.recv_queue.push_back(m);
+                },
                 MessageKind::Ordered => self.receive_ordered_message(m),
                 MessageKind::Invalid => { /* ignore all other messages */ }
             }
@@ -257,10 +258,11 @@ impl MessageQueue {
     pub fn lost_packet(&mut self, packet: &[u8]) {
         for m in messages_from_packet(packet) {
             match m.kind {
-                MessageKind::Instant => { /* ignore lost instant messages */ },
+                MessageKind::Instant | MessageKind::Invalid => {
+                    // ignore lost instant / invalid messages
+                },
                 MessageKind::Reliable => self.r_queue.push_front(m),
-                MessageKind::Ordered => self.o_queue.push_front(m),
-                MessageKind::Invalid => { /* ignore all other messages */ }
+                MessageKind::Ordered => self.o_queue.push_front(m)
             }
         }
     }
@@ -329,17 +331,14 @@ impl MessageQueue {
         // Otherwise check if the message order is more recent and if not, we
         // simply drop it. If it IS more recent, then we have received a future
         // message out of order.
-        } else if order_is_more_recent(m.order, self.remote_order_id) {
-
-            // Now, before we insert the message into the min-heap, we check
-            // that there's no other message with the same order id in the heap
-            // already. Duplicates would require additional peek / pop later on
-            // when removing messages from the heap, so we resort to a Set here.
-            if self.o_recv_set.contains(&m.order) == false {
-                self.o_recv_set.insert(m.order);
-                self.o_recv_heap.push(m);
-            }
-
+        //
+        // Also, before we insert the message into the min-heap, we check
+        // that there's no other message with the same order id in the heap
+        // already. Duplicates would require additional peek / pop later on
+        // when removing messages from the heap, so we resort to a Set here.
+        } else if order_is_more_recent(m.order, self.remote_order_id) && !self.o_recv_set.contains(&m.order) {
+            self.o_recv_set.insert(m.order);
+            self.o_recv_heap.push(m);
         }
 
     }
@@ -418,7 +417,10 @@ fn write_message(
 
 ) -> bool {
 
-    if queue.is_empty() == false {
+    if queue.is_empty() {
+        false
+
+    } else {
 
         let required = {
             (queue.front().unwrap().size as usize) + MESSAGE_HEADER_BYTES
@@ -442,8 +444,6 @@ fn write_message(
             true
         }
 
-    } else {
-        false
     }
 
 }

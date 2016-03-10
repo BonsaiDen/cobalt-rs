@@ -53,12 +53,12 @@ impl Client {
 
     /// Returns the address of the server the client is currently connected to.
     pub fn peer_addr(&self) -> Result<SocketAddr, Error> {
-        self.peer_address.ok_or(Error::new(ErrorKind::AddrNotAvailable, ""))
+        self.peer_address.ok_or_else(|| Error::new(ErrorKind::AddrNotAvailable, ""))
     }
 
     /// Returns the local address that the client is sending from.
     pub fn local_addr(&self) -> Result<SocketAddr, Error> {
-        self.local_address.ok_or(Error::new(ErrorKind::AddrNotAvailable, ""))
+        self.local_address.ok_or_else(|| Error::new(ErrorKind::AddrNotAvailable, ""))
     }
 
     /// Returns statistics (i.e. bandwidth usage) for the last second.
@@ -150,12 +150,12 @@ impl Client {
     /// This exits the tick loop, resets the connection and shuts down the
     /// underlying socket the client was sending and receiving from.
     pub fn close(&mut self) -> Result<(), Error>{
-        if !self.running {
-            Err(Error::new(ErrorKind::NotConnected, ""))
-
-        } else {
+        if self.running {
             self.running = false;
             Ok(())
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
         }
     }
 

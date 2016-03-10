@@ -41,7 +41,7 @@ impl Server {
 
     /// Returns the local address that the server is bound to.
     pub fn local_addr(&self) -> Result<SocketAddr, Error> {
-        self.local_address.ok_or(Error::new(ErrorKind::AddrNotAvailable, ""))
+        self.local_address.ok_or_else(|| Error::new(ErrorKind::AddrNotAvailable, ""))
     }
 
     /// Returns statistics (i.e. bandwidth usage) for the last second.
@@ -116,51 +116,48 @@ impl Server {
             while let Ok((addr, packet)) = socket.try_recv() {
 
                 // Try to extract the connection id from the packet
-                match Connection::id_from_packet(&self.config, &packet) {
-                    Some(id) => {
+                if let Some(id) = Connection::id_from_packet(&self.config, &packet) {
 
-                        // Retrieve or create a connection for the current
-                        // connection id
-                        let connection = connections.entry(id).or_insert_with(|| {
+                    // Retrieve or create a connection for the current
+                    // connection id
+                    let connection = connections.entry(id).or_insert_with(|| {
 
-                            // Also map the intitial address which is used by
-                            // the connection
-                            addresses.insert(id, addr);
+                        // Also map the intitial address which is used by
+                        // the connection
+                        addresses.insert(id, addr);
 
-                            let mut conn = Connection::new(
-                                self.config,
-                                local_addr,
-                                addr,
-                                handler.rate_limiter(&self.config)
-                            );
-
-                            conn.set_id(id);
-                            conn
-
-                        });
-
-                        // Map the current remote address of the connection to
-                        // the latest address that sent a packet for the
-                        // connection id in question. This is done in order to
-                        // work in situations were the remote port of a
-                        // connection is switched around by NAT.
-                        if addr != connection.peer_addr() {
-                            connection.set_peer_addr(addr);
-                            addresses.remove(&id);
-                            addresses.insert(id, addr);
-                        }
-
-                        // Statistics
-                        bytes_received += packet.len();
-
-                        // Then feed the packet into the connection object for
-                        // parsing
-                        connection.receive_packet(
-                            packet, tick_delay / 1000000, self, handler
+                        let mut conn = Connection::new(
+                            self.config,
+                            local_addr,
+                            addr,
+                            handler.rate_limiter(&self.config)
                         );
 
-                    },
-                    None => { /* Ignore any invalid packets */ }
+                        conn.set_id(id);
+                        conn
+
+                    });
+
+                    // Map the current remote address of the connection to
+                    // the latest address that sent a packet for the
+                    // connection id in question. This is done in order to
+                    // work in situations were the remote port of a
+                    // connection is switched around by NAT.
+                    if addr != connection.peer_addr() {
+                        connection.set_peer_addr(addr);
+                        addresses.remove(&id);
+                        addresses.insert(id, addr);
+                    }
+
+                    // Statistics
+                    bytes_received += packet.len();
+
+                    // Then feed the packet into the connection object for
+                    // parsing
+                    connection.receive_packet(
+                        packet, tick_delay / 1000000, self, handler
+                    );
+
                 }
 
             }
@@ -172,7 +169,7 @@ impl Server {
 
             // Create outgoing packets for all connections
             let mut bytes_sent = 0;
-            for (id, conn) in connections.iter_mut() {
+            for (id, conn) in &mut connections {
 
                 // Resolve the last known remote address for this
                 // connection and send the data
@@ -182,7 +179,7 @@ impl Server {
                 bytes_sent += conn.send_packet(&mut socket, addr, self, handler);
 
                 // Collect all lost / closed connections
-                if conn.open() == false {
+                if !conn.open() {
                     dropped.push(*id);
                 }
 
@@ -193,9 +190,9 @@ impl Server {
             self.statistics.tick();
 
             // Remove any dropped connections and their address mappings
-            if dropped.is_empty() == false {
+            if !dropped.is_empty() {
 
-                for id in dropped.iter() {
+                for id in &dropped {
                     connections.remove(id).unwrap().reset();
                     addresses.remove(id);
                 }
@@ -225,7 +222,7 @@ impl Server {
         self.local_address = None;
 
         // Reset all connection states
-        for (_, conn) in connections.iter_mut() {
+        for (_, conn) in &mut connections {
             conn.reset();
         }
 

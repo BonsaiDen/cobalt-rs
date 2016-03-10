@@ -227,8 +227,7 @@ impl Connection {
     /// packets.
     pub fn open(&self) -> bool {
         match self.state {
-            ConnectionState::Connecting => true,
-            ConnectionState::Connected => true,
+            ConnectionState::Connecting | ConnectionState::Connected => true,
             _ => false
         }
     }
@@ -312,9 +311,10 @@ impl Connection {
         // Ignore any packets shorter then the header length
         if packet.len() < PACKET_HEADER_SIZE {
             return;
+        }
 
         // Update connection state
-        } else if self.update_receive_state(&packet, owner, handler) == false {
+        if !self.update_receive_state(&packet, owner, handler) {
             return;
         }
 
@@ -419,7 +419,7 @@ impl Connection {
     ) -> u32 {
 
         // Update connection state
-        if self.update_send_state(owner, handler) == false {
+        if !self.update_send_state(owner, handler) {
             return 0;
         }
 
@@ -436,7 +436,7 @@ impl Connection {
         }
 
         // Check if we should be sending packets, if not skip this packet
-        if self.rate_limiter.should_send() == false {
+        if !self.rate_limiter.should_send() {
             return 0;
         }
 
@@ -463,7 +463,7 @@ impl Connection {
 
         // Construct ack bitfield from most recently received packets
         let mut bitfield: u32 = 0;
-        for seq in self.recv_ack_queue.iter() {
+        for seq in &self.recv_ack_queue {
 
             // Ignore the remote sequence as it already gets set in the header
             if *seq != self.remote_seq_number {
@@ -519,7 +519,7 @@ impl Connection {
 
 
         // Insert packet into send acknowledgment queue (but avoid dupes)
-        if self.send_ack_required(self.local_seq_number) == true {
+        if self.send_ack_required(self.local_seq_number) {
             self.sent_ack_queue.push(SentPacketAck {
                 seq: self.local_seq_number,
                 time: precise_time_ms(),
@@ -579,11 +579,7 @@ impl Connection {
         // Ignore any packets which do not match the desired protocol header
         &packet[0..4] == &self.config.protocol_header && match self.state {
 
-            ConnectionState::Lost => false,
-
-            ConnectionState::Closed => false,
-
-            ConnectionState::FailedToConnect => false,
+            ConnectionState::Lost | ConnectionState::Closed | ConnectionState::FailedToConnect => false,
 
             ConnectionState::Connecting => {
 
@@ -626,11 +622,7 @@ impl Connection {
 
         match self.state {
 
-            ConnectionState::Lost => false,
-
-            ConnectionState::Closed => false,
-
-            ConnectionState::FailedToConnect => false,
+            ConnectionState::Lost | ConnectionState::Closed | ConnectionState::FailedToConnect => false,
 
             ConnectionState::Connecting => {
 
@@ -665,7 +657,7 @@ impl Connection {
 
     // Internal Helpers -------------------------------------------------------
     fn send_ack_required(&self, seq: u32) -> bool {
-        self.sent_ack_queue.iter().any(|p| p.seq == seq) == false
+        !self.sent_ack_queue.iter().any(|p| p.seq == seq)
     }
 
 }

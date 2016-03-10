@@ -110,7 +110,7 @@ impl StatsCollector {
     /// Resets the internal data used for average calculation, but does not
     /// reset the last calculated averages.
     pub fn reset(&mut self) {
-        for d in self.buckets.iter_mut() {
+        for d in &mut self.buckets {
             d.reset();
         }
     }
