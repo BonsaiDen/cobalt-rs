@@ -9,6 +9,7 @@ env:
 matrix:
   allow_failure:
     - rust: nightly
+      env: FEATURES="all lint"
 
   include:
     - rust: nightly
@@ -17,4 +18,3 @@ matrix:
 script:
   - cargo build --features "${FEATURES}" --verbose
   - cargo test --features "${FEATURES}" --verbose
-
