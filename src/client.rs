@@ -15,7 +15,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::stats::{StatsCollector, Stats};
 use shared::udp_socket::UdpSocket;
-use super::{Config, Connection, Handler, MessageKind};
+use super::{Config, ClientStream, Connection, Handler, MessageKind};
 
 /// Implementation of a single-server client with handler based event dispatch.
 ///
@@ -64,6 +64,11 @@ impl Client {
     /// Returns statistics (i.e. bandwidth usage) for the last second.
     pub fn stats(&mut self) -> Stats {
         self.statistics.average()
+    }
+
+    /// Returns a copy of the client's current configuration.
+    pub fn config(&self) -> Config {
+        self.config
     }
 
     /// Overrides the client's existing configuration.
@@ -300,6 +305,12 @@ impl Client {
 
     }
 
+    /// Consumes the `Client` instance and turns it into a `ClientStream`
+    /// interface.
+    pub fn into_stream(self) -> ClientStream {
+        ClientStream::new(self)
+    }
+
 }
 
 /// A structure used for synchronous calls on a `Client` instance.
@@ -311,7 +322,7 @@ pub struct ClientState<S: Socket> {
     stats: Stats
 }
 
-impl <S: Socket>ClientState< S> {
+impl <S: Socket>ClientState<S> {
 
     // We need to encapsulate the above objects because they cannot be
     // owned by the client itself without running into issues with multiple
@@ -348,7 +359,7 @@ impl <S: Socket>ClientState< S> {
     }
 
     /// Returns statistics (i.e. bandwidth usage) for the last second, of this
-    /// client'sunderlying connection.
+    /// client's underlying connection.
     pub fn stats(&self) -> Stats {
         self.stats
     }

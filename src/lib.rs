@@ -130,14 +130,11 @@
 //! client.connect(&mut handler, "127.0.0.1:7156").expect("Failed to connect.");
 //! ```
 //!
-//! ## Integration with existing event loops
+//! ## Synchronous integration
 //!
 //! When a client already provides its own event loop via a rendering framework
 //! or game engine, a **synchronous** version of the `Client` interface is also
-//! available in order to ease integration in such cases.
-//!
-//! In these cases it can also make sense to use a `EventQueue` like
-//! implementation of the `Handler` trait.
+//! available in order to ease integration for such use cases.
 //!
 //! ```
 //! use cobalt::{Client, Config, Handler};
@@ -172,6 +169,7 @@
     unused_import_braces, unused_qualifications
 )]
 mod client;
+mod client_stream;
 mod server;
 
 mod shared {
@@ -226,6 +224,9 @@ pub use client::Client;
 
 #[doc(inline)]
 pub use client::ClientState;
+
+#[doc(inline)]
+pub use client_stream::ClientStream;
 
 #[doc(inline)]
 pub use server::Server;
