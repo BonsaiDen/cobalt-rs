@@ -7,7 +7,7 @@
 // except according to those terms.
 
 /// Structure defining connection and message configuration options.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Config {
 
     /// Number of packets send per second. Default is `30`.

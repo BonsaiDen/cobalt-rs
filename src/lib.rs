@@ -8,35 +8,40 @@
 
 //! **cobalt** is a networking library which provides [virtual connections
 //! over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/)
-//! along with a messaging layer for sending both unreliable, reliable as well
-//! as ordered messages.
+//! for both unreliable, reliable and optional in-order delivery of messages.
 //!
-//! It is primarily designed to be used as the basis for real-time, latency
-//! bound, multi client systems.
+//! It is primarily designed to be used as the basis of real-time, low latency,
+//! single server / multi client systems.
 //!
 //! The library provides the underlying architecture required for handling and
 //! maintaining virtual connections over UDP sockets and takes care of sending
-//! reliable, raw messages over the established client-server connections with
-//! minimal overhead.
+//! raw messages over the established client-server connections with minimal
+//! overhead.
 //!
-//! cobalt is also fully configurable and can be plugged in a variety of ways,
-//! so that library users have the largest possible degree of control over
-//! the behavior of their connections.
+//! **cobalt** is also fully configurable and can be integrated in a variety of
+//! ways, as can be seen in the examples below.
 //!
 //! ## Getting started
 //!
-//! When working with **cobalt** the most important part is implementing the so
-//! called handlers. A `Handler` is a trait which acts as a event proxy for
-//! both server and client events that are emitted from the underlying tick
-//! loop.
+//! **cobalt** supports a number of different integration strategies, the most
+//! forward one being the use of so called *handlers*. The `Handler` trait acts
+//! as a event proxy for both server and client events that are emitted from
+//! the underlying tick loop inside the library.
 //!
-//! Below follows a very basic example implementation of a custom game server.
+//!
+//! ## Handler based integration
+//!
+//! The handler based approach suits itself especially well for the server side
+//! where all updates on any connections will be performed inside a single tick
+//! handler.
 //!
 //! ```
 //! use std::collections::HashMap;
-//! use cobalt::{Config, Connection, ConnectionID, Handler, Server};
+//! use cobalt::{Config, Connection, ConnectionID, Handler, Server, MessageKind};
 //!
-//! struct GameServer;
+//! struct GameServer {
+//!     tick: u8
+//! }
 //! impl Handler<Server> for GameServer {
 //!
 //!     fn bind(&mut self, server: &mut Server) {
@@ -51,12 +56,17 @@
 //!
 //!         for (_, conn) in connections.iter_mut() {
 //!             // Receive player input
+//!             for msg in conn.received() {
+//!                 println!("Received message from client: {:?}", msg);
+//!             }
 //!         }
 //!
 //!         // Advance game state
+//!         self.tick = self.tick.wrapping_add(1);
 //!
+//!         // Send state updates to players
 //!         for (_, conn) in connections.iter_mut() {
-//!             // Send state to players
+//!             conn.send(MessageKind::Instant, b"Hello World".to_vec());
 //!         }
 //!
 //!     }
@@ -75,18 +85,25 @@
 //!
 //! }
 //!
-//! let mut handler = GameServer;
+//! let mut handler = GameServer {
+//!     tick: 0
+//! };
 //! let mut server = Server::new(Config::default());
-//! server.bind(&mut handler, "127.0.0.1:7156").expect("Failed to bind server.");
+//! server.bind(&mut handler, "127.0.0.1:7156").ok();
 //! ```
 //!
-//! And the client version would look almost identical except for a few methods
-//! having different names.
+//! The client version of the handler based approach looks almost
+//! identical - except for a few methods sporting different names.
+//!
+//! This method is best used when separate logic / rendering threads are used.
 //!
 //! ```
-//! use cobalt::{Config, Connection, Handler, Client};
+//! use cobalt::{Config, Connection, Handler, Client, MessageKind};
 //!
-//! struct GameClient;
+//! struct GameClient {
+//!     tick: u8
+//! };
+//!
 //! impl Handler<Client> for GameClient {
 //!
 //!     fn connect(&mut self, client: &mut Client) {
@@ -102,8 +119,10 @@
 //!         }
 //!
 //!         // Advance game state
+//!         self.tick = self.tick.wrapping_add(1);
 //!
-//!         // Send input to server
+//!         // Send some message to server
+//!         conn.send(MessageKind::Instant, b"Hello World".to_vec());
 //!
 //!     }
 //!
@@ -125,19 +144,64 @@
 //!
 //! }
 //!
-//! let mut handler = GameClient;
+//! let mut handler = GameClient {
+//!     tick: 0
+//! };
 //! let mut client = Client::new(Config::default());
-//! client.connect(&mut handler, "127.0.0.1:7156").expect("Failed to connect.");
+//! client.connect(&mut handler, "127.0.0.1:7156").ok();
 //! ```
 //!
-//! ## Synchronous integration
+//! ## Stream based integration
 //!
-//! When a client already provides its own event loop via a rendering framework
-//! or game engine, a **synchronous** version of the `Client` interface is also
-//! available in order to ease integration for such use cases.
+//! For situations where a event loop is already in place (e.g. game engines),
+//! a stream based approach can be used in order to achieve easier integration
+//! in single threaded scenarios.
 //!
 //! ```
-//! use cobalt::{Client, Config, Handler};
+//! use cobalt::{ClientEvent, ClientStream, Config, MessageKind};
+//!
+//! // Create a new stream
+//! let mut stream = ClientStream::new(Config {
+//!     send_rate: 15,
+//!     .. Default::default()
+//! });
+//!
+//! // Initiate the connection
+//! stream.connect("127.0.0.1:5555").ok();
+//!
+//! // Inside of the existing event loop
+//! // loop {
+//!
+//!     // Receive incoming messages
+//!     while let Ok(event) = stream.receive() {
+//!         match event {
+//!             ClientEvent::Connection => println!("Connection established"),
+//!             ClientEvent::ConnectionLost => println!("Connection lost"),
+//!             ClientEvent::Tick => {
+//!                 // Handle network related logic, advance actual in game time
+//!             },
+//!             ClientEvent::Message(payload) => println!("Received message: {:?}", payload),
+//!             _ => {}
+//!         }
+//!     }
+//!
+//!     // Send some messages
+//!     stream.send(MessageKind::Instant, b"Hello World".to_vec());
+//!
+//!     // Send outgoing messages
+//!     stream.flush().ok();
+//!
+//! // }
+//! ```
+//!
+//! ## Low level synchronous integration
+//!
+//! For times when even the stream based abstraction is too much, there's also
+//! the option to use the underlying synchronous client implement on top of
+//! which both the handler and stream based approaches are built.
+//!
+//! ```
+//! use cobalt::{Client, Config, Handler, MessageKind};
 //!
 //! struct SyncHandler;
 //! impl Handler<Client> for SyncHandler {}
@@ -148,13 +212,16 @@
 //!     &mut handler,
 //!     "127.0.0.1:7156"
 //!
-//! ).expect("Failed to connect.");
+//! ).unwrap();
 //!
-//! // Receive from and tick the client connection
+//! // Receive from the server
 //! client.receive_sync(&mut handler, &mut state, 0);
+//!
+//! // Tick the connection
 //! client.tick_sync(&mut handler, &mut state);
 //!
-//! // Handle received message and send new ones here
+//! // Send a message
+//! state.send(MessageKind::Instant, b"Hello World".to_vec());
 //!
 //! // Send any pending messages via the connection
 //! client.send_sync(&mut handler, &mut state);
@@ -229,11 +296,15 @@ pub use client::ClientState;
 pub use client_stream::ClientStream;
 
 #[doc(inline)]
+pub use client_stream::ClientEvent;
+
+#[doc(inline)]
 pub use server::Server;
 
 #[cfg(test)]
 mod tests {
     mod client;
+    mod client_stream;
     mod connection;
     mod message_queue;
     mod server;

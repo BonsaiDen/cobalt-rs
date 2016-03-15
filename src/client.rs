@@ -308,7 +308,7 @@ impl Client {
     /// Consumes the `Client` instance and turns it into a `ClientStream`
     /// interface.
     pub fn into_stream(self) -> ClientStream {
-        ClientStream::new(self)
+        ClientStream::from_client(self)
     }
 
 }

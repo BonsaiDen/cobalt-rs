@@ -128,7 +128,7 @@ fn test_client_sync() {
 
     let config = Config {
         send_rate: 10,
-        .. Config::default()
+        .. Default::default()
     };
 
     let mut handler = MockSyncClientHandler {
