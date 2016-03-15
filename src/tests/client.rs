@@ -216,8 +216,8 @@ fn test_client_stats() {
 
     let config = Config {
         send_rate: 20,
-        connection_init_threshold: 500000,
-        connection_drop_threshold: 500000,
+        connection_init_threshold: 1500,
+        connection_drop_threshold: 1500,
         .. Config::default()
     };
 
