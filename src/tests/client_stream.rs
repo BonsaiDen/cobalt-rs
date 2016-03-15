@@ -98,24 +98,22 @@ fn test_client_stream_connect() {
 
     // Wait and receive messages from server
     let mut received = Vec::new();
-    let mut send = false;
     'wait: loop {
 
         while let Ok(event) = stream.receive() {
 
             if received.len() == 0 || received[received.len() - 1] != event{
-                if event == ClientEvent::ConnectionLost {
+                if event == ClientEvent::ConnectionLost || event == ClientEvent::ConnectionFailed {
                     break 'wait;
+
                 } else {
+                    if event == ClientEvent::Connection  {
+                        stream.send(MessageKind::Instant, b"Hello World".to_vec()).unwrap();
+                    }
                     received.push(event);
                 }
             }
 
-        }
-
-        if !send  {
-            stream.send(MessageKind::Instant, b"Hello World".to_vec()).unwrap();
-            send = true;
         }
 
         stream.flush().unwrap();
