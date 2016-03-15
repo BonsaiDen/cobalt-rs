@@ -89,6 +89,8 @@ fn test_client_stream_connect() {
     // Connect
     let mut stream = ClientStream::new(Config {
         send_rate: 5,
+        connection_init_threshold: 200,
+        connection_drop_threshold: 200,
         .. Default::default()
     });
 
@@ -117,7 +119,7 @@ fn test_client_stream_connect() {
         }
 
         stream.flush().unwrap();
-        thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(20));
 
     }
 
@@ -127,6 +129,8 @@ fn test_client_stream_connect() {
         ClientEvent::Connect,
         ClientEvent::Tick,
         ClientEvent::Connection,
+        ClientEvent::Message([0].to_vec()),
+        ClientEvent::Tick,
         ClientEvent::Message([1].to_vec()),
         ClientEvent::Tick,
         ClientEvent::Message([2].to_vec()),
@@ -164,17 +168,14 @@ impl Handler<Server> for MockServerHandler {
         for (_, conn) in connections.iter_mut() {
 
             if self.send_count < 3 {
-                conn.send(MessageKind::Instant, [self.send_count].to_vec())
+                conn.send(MessageKind::Instant, [self.send_count].to_vec());
+                self.send_count += 1;
             }
 
             for msg in conn.received() {
                 self.received.push(msg);
             }
 
-        }
-
-        if self.send_count < 3 {
-            self.send_count += 1;
         }
 
         if self.received.len() > 0 && self.send_count == 3 {
