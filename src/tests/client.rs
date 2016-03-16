@@ -128,7 +128,7 @@ fn test_client_sync() {
 
     let config = Config {
         send_rate: 10,
-        .. Config::default()
+        .. Default::default()
     };
 
     let mut handler = MockSyncClientHandler {
@@ -216,8 +216,8 @@ fn test_client_stats() {
 
     let config = Config {
         send_rate: 20,
-        connection_init_threshold: 500000,
-        connection_drop_threshold: 500000,
+        connection_init_threshold: 1500,
+        connection_drop_threshold: 1500,
         .. Config::default()
     };
 
