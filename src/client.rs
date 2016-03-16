@@ -66,6 +66,11 @@ impl Client {
         self.statistics.average()
     }
 
+    /// Returns a copy of the client's current configuration.
+    pub fn config(&self) -> Config {
+        self.config
+    }
+
     /// Overrides the client's existing configuration.
     pub fn set_config<S: Socket>(&mut self, config: Config, state: &mut ClientState<S>) {
         self.config = config;
@@ -311,7 +316,7 @@ pub struct ClientState<S: Socket> {
     stats: Stats
 }
 
-impl <S: Socket>ClientState< S> {
+impl <S: Socket>ClientState<S> {
 
     // We need to encapsulate the above objects because they cannot be
     // owned by the client itself without running into issues with multiple
@@ -348,7 +353,7 @@ impl <S: Socket>ClientState< S> {
     }
 
     /// Returns statistics (i.e. bandwidth usage) for the last second, of this
-    /// client'sunderlying connection.
+    /// client's underlying connection.
     pub fn stats(&self) -> Stats {
         self.stats
     }
