@@ -172,6 +172,7 @@
     unused_import_braces, unused_qualifications
 )]
 mod client;
+mod client_stream;
 mod server;
 
 mod shared {
@@ -228,11 +229,18 @@ pub use client::Client;
 pub use client::ClientState;
 
 #[doc(inline)]
+pub use client_stream::ClientStream;
+
+#[doc(inline)]
+pub use client_stream::ClientEvent;
+
+#[doc(inline)]
 pub use server::Server;
 
 #[cfg(test)]
 mod tests {
     mod client;
+    mod client_stream;
     mod connection;
     mod message_queue;
     mod server;

@@ -15,7 +15,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::stats::{StatsCollector, Stats};
 use shared::udp_socket::UdpSocket;
-use super::{Config, Connection, Handler, MessageKind};
+use super::{Config, ClientStream, Connection, Handler, MessageKind};
 
 /// Implementation of a single-server client with handler based event dispatch.
 ///
@@ -303,6 +303,12 @@ impl Client {
 
         }
 
+    }
+
+    /// Consumes the `Client` instance and turns it into a `ClientStream`
+    /// interface.
+    pub fn into_stream(self) -> ClientStream {
+        ClientStream::from_client(self)
     }
 
 }
