@@ -49,12 +49,13 @@ fn test_server_bind_and_shutdown() {
 fn test_server_client_connection() {
 
     // Get a free local socket and then drop it for quick re-use
-    // this is note 100% safe but we cannot easily get the locally bound server
+    // this is not 100% safe but we cannot easily get the locally bound server
     // address after bind() has been called
     let address: Option<net::SocketAddr> = {
         Some(net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap())
     };
 
+    // Setup Test Server
     let server_address = address.clone();
     thread::spawn(move|| {
 

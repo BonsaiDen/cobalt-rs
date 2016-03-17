@@ -136,7 +136,7 @@ impl ClientStream {
 
     // Setter
 
-    /// Overrides the streams's current configuration with the one provided.
+    /// Overrides the stream's current configuration with the one provided.
     pub fn set_config(&mut self, config: Config) {
 
         self.config = config;
