@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-cobalt = "0.9.0"
+cobalt = "0.9.1"
 ```
 
 and this to your crate root:
@@ -28,7 +28,7 @@ packet compression inside `Cargo.toml`:
 
 ```toml
 [dependencies.cobalt]
-version = "0.9.0"
+version = "0.9.1"
 features = ["packet_handler_lost", "packet_handler_compress"]
 ```
 

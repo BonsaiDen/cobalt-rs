@@ -153,11 +153,17 @@ impl ClientStream {
     pub fn connect<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), Error> {
 
         if self.state.is_none() {
+
+            // Clear any previous stream events
+            self.handler.clear();
+
             let mut state = self.client.connect_sync(&mut self.handler, addr).unwrap();
             state.set_config(self.config);
+
             self.tick_rate = self.config.send_rate;
             self.should_receive = true;
             self.state = Some(state);
+
             Ok(())
 
         } else {
@@ -247,14 +253,18 @@ struct StreamHandler {
 
 impl StreamHandler {
 
-    pub fn new() -> StreamHandler {
+    fn new() -> StreamHandler {
         StreamHandler {
             events: VecDeque::new()
         }
     }
 
-    pub fn try_recv(&mut self) -> Option<ClientEvent> {
+    fn try_recv(&mut self) -> Option<ClientEvent> {
         self.events.pop_front()
+    }
+
+    fn clear(&mut self) {
+        self.events.clear();
     }
 
 }

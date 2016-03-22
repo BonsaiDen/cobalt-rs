@@ -102,7 +102,7 @@ fn test_client_stream_connect() {
 
         while let Ok(event) = stream.receive() {
 
-            if received.len() == 0 || received[received.len() - 1] != event{
+            if received.len() == 0 || received[received.len() - 1] != event {
                 if event == ClientEvent::ConnectionLost || event == ClientEvent::ConnectionFailed {
                     break 'wait;
 
@@ -133,13 +133,52 @@ fn test_client_stream_connect() {
         ClientEvent::Tick,
         ClientEvent::Message([2].to_vec()),
         ClientEvent::Tick
-
     ]);
 
     stream.close().unwrap();
 
 }
 
+#[test]
+fn test_client_stream_reconnect() {
+
+    let mut stream = ClientStream::new(Config {
+        send_rate: 5,
+        connection_init_threshold: 100,
+        connection_drop_threshold: 100,
+        .. Default::default()
+    });
+
+    stream.connect("127.0.0.1:9999").expect("ClientStream address already in use!");
+
+    // Wait for events
+    let mut tick = 0;
+    loop {
+        stream.flush().unwrap();
+        tick += 1;
+        if tick > 10 {
+            break;
+        }
+    }
+
+    // Close stream
+    stream.close().unwrap();
+
+    // Reconnect
+    stream.connect("127.0.0.1:9999").expect("ClientStream address already in use!");
+
+    // Expect previous stream events to be cleared (Connect, Close)
+    let mut events = Vec::new();
+    while let Ok(event) = stream.receive() {
+        events.push(event);
+    }
+
+    assert_eq!(events, vec![
+        ClientEvent::Connect,
+        ClientEvent::Tick,
+    ]);
+
+}
 
 pub struct MockServerHandler {
     send_count: u8,
