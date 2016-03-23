@@ -2,6 +2,7 @@ extern crate cobalt;
 
 use std::net;
 use std::thread;
+use std::time::Duration;
 use std::collections::HashMap;
 use cobalt::{Client, Connection, ConnectionID, Config, Handler, Server};
 
@@ -29,7 +30,7 @@ fn test_client_connection_failure() {
 fn test_server_bind_and_shutdown() {
 
     let config = Config::default();
-    let mut handler = MockServerHandler::new(0);
+    let mut handler = MockServerHandler::new(0, false);
     let mut server = Server::new(config);
     server.bind(&mut handler, "127.0.0.1:0").unwrap();
 
@@ -46,7 +47,7 @@ fn test_server_bind_and_shutdown() {
 }
 
 #[test]
-fn test_server_client_connection() {
+fn test_server_client_connection_lost() {
 
     // Get a free local socket and then drop it for quick re-use
     // this is not 100% safe but we cannot easily get the locally bound server
@@ -57,10 +58,10 @@ fn test_server_client_connection() {
 
     // Setup Test Server
     let server_address = address.clone();
-    thread::spawn(move|| {
+    let server_thread = thread::spawn(move|| {
 
         let config = Config::default();
-        let mut server_handler = MockServerHandler::new(35);
+        let mut server_handler = MockServerHandler::new(35, false);
         let mut server = Server::new(config);
         server.bind(&mut server_handler, server_address.unwrap()).unwrap();
 
@@ -73,6 +74,7 @@ fn test_server_client_connection() {
         assert_eq!(server_handler.connection_congestion_state_calls, 0);
         assert_eq!(server_handler.connection_packet_lost_calls, 0);
         assert_eq!(server_handler.connection_lost_calls, 0);
+        assert_eq!(server_handler.connection_closed_calls, 0);
 
     });
 
@@ -81,6 +83,7 @@ fn test_server_client_connection() {
     let mut client = Client::new(config);
     client.connect(&mut client_handler, address.unwrap()).unwrap();
 
+    server_thread.join().unwrap();
     assert_eq!(client_handler.connect_calls, 1);
     assert!(client_handler.tick_connection_calls > 0);
     assert_eq!(client_handler.close_calls, 1);
@@ -92,6 +95,43 @@ fn test_server_client_connection() {
     // interact
     // assert_eq!(client_handler.connection_packet_lost_calls, 0);
     assert_eq!(client_handler.connection_lost_calls, 1);
+    assert_eq!(client_handler.connection_closed_calls, 0);
+
+}
+
+#[test]
+fn test_server_client_connection_close() {
+
+    // Get a free local socket and then drop it for quick re-use
+    // this is not 100% safe but we cannot easily get the locally bound server
+    // address after bind() has been called
+    let address: Option<net::SocketAddr> = {
+        Some(net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap())
+    };
+
+    // Setup Test Server
+    let server_address = address.clone();
+    let server_thread = thread::spawn(move|| {
+
+        let config = Config::default();
+        let mut server_handler = MockServerHandler::new(35, true);
+        let mut server = Server::new(config);
+        server.bind(&mut server_handler, server_address.unwrap()).unwrap();
+
+        assert_eq!(server_handler.connection_closed_calls, 1);
+        assert_eq!(server_handler.closed_by_remote, false);
+
+    });
+
+    let config = Config::default();
+    let mut client_handler = MockClientHandler::new();
+    let mut client = Client::new(config);
+    client.connect(&mut client_handler, address.unwrap()).unwrap();
+
+    server_thread.join().unwrap();
+    assert_eq!(client_handler.connection_closed_calls, 1);
+    assert_eq!(client_handler.closed_by_remote, true);
+
 
 }
 
@@ -105,7 +145,9 @@ pub struct MockClientHandler {
     pub connection_failed_calls: u32,
     pub connection_congestion_state_calls: u32,
     pub connection_packet_lost_calls: u32,
-    pub connection_lost_calls: u32
+    pub connection_lost_calls: u32,
+    pub connection_closed_calls: u32,
+    pub closed_by_remote: bool
 }
 
 impl MockClientHandler {
@@ -119,7 +161,9 @@ impl MockClientHandler {
             connection_failed_calls: 0,
             connection_congestion_state_calls: 0,
             connection_packet_lost_calls: 0,
-            connection_lost_calls: 0
+            connection_lost_calls: 0,
+            connection_closed_calls: 0,
+            closed_by_remote: false
         }
     }
 }
@@ -162,6 +206,12 @@ impl Handler<Client> for MockClientHandler {
         client.close().unwrap();
     }
 
+    fn connection_closed(&mut self, client: &mut Client, _: &mut Connection, by_remote: bool) {
+        self.connection_closed_calls += 1;
+        self.closed_by_remote = by_remote;
+        client.close().unwrap();
+    }
+
 }
 
 
@@ -169,6 +219,7 @@ impl Handler<Client> for MockClientHandler {
 pub struct MockServerHandler {
 
     shutdown_ticks: u32,
+    close_connection: bool,
 
     pub shutdown_calls: u32,
     pub tick_connections_calls: u32,
@@ -178,13 +229,16 @@ pub struct MockServerHandler {
     pub connection_failed_calls: u32,
     pub connection_congestion_state_calls: u32,
     pub connection_packet_lost_calls: u32,
-    pub connection_lost_calls: u32
+    pub connection_lost_calls: u32,
+    pub connection_closed_calls: u32,
+    pub closed_by_remote: bool
 }
 
 impl MockServerHandler {
-    pub fn new(shutdown_ticks: u32) -> MockServerHandler {
+    pub fn new(shutdown_ticks: u32, close_connection: bool) -> MockServerHandler {
         MockServerHandler {
             shutdown_ticks: shutdown_ticks,
+            close_connection: close_connection,
 
             shutdown_calls: 0,
             tick_connections_calls: 0,
@@ -194,7 +248,9 @@ impl MockServerHandler {
             connection_failed_calls: 0,
             connection_congestion_state_calls: 0,
             connection_packet_lost_calls: 0,
-            connection_lost_calls: 0
+            connection_lost_calls: 0,
+            connection_closed_calls: 0,
+            closed_by_remote: false
         }
     }
 }
@@ -218,7 +274,14 @@ impl Handler<Server> for MockServerHandler {
         self.tick_connections_calls += 1;
 
         if self.tick_connections_calls > self.shutdown_ticks {
-            server.shutdown().unwrap();
+            if self.close_connection {
+                for (_, conn) in connections.iter_mut() {
+                    conn.close();
+                }
+
+            } else {
+                server.shutdown().unwrap();
+            }
         }
 
     }
@@ -247,6 +310,13 @@ impl Handler<Server> for MockServerHandler {
 
     fn connection_lost(&mut self, _: &mut Server, _: &mut Connection) {
         self.connection_lost_calls += 1;
+    }
+
+    fn connection_closed(&mut self, server: &mut Server, _: &mut Connection, by_remote: bool) {
+        self.connection_closed_calls += 1;
+        self.closed_by_remote = by_remote;
+        thread::sleep(Duration::from_millis(50));
+        server.shutdown().unwrap();
     }
 
 }

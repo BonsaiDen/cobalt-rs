@@ -74,6 +74,10 @@ pub trait Handler<T> {
     fn connection_lost(&mut self, _: &mut T, _: &mut Connection) {
     }
 
+    /// Method that is called each time a connection is programmatically closed.
+    fn connection_closed(&mut self, _: &mut T, _: &mut Connection, _: bool) {
+    }
+
     // Packet specific
 
     /// Method that is called each time a packet send by a connection is lost.

@@ -40,6 +40,9 @@ pub enum ClientEvent {
     /// Event emitted when a existing connection to a server is lost.
     ConnectionLost,
 
+    /// Event emitted when a connection is closed programmatically.
+    ConnectionClosed(bool),
+
     /// Event emitted for each message received from the server.
     Message(Vec<u8>),
 
@@ -311,6 +314,10 @@ impl Handler<Client> for StreamHandler {
 
     fn connection_lost(&mut self, _: &mut Client, _: &mut Connection) {
         self.events.push_back(ClientEvent::ConnectionLost);
+    }
+
+    fn connection_closed(&mut self, _: &mut Client, _: &mut Connection, by_remote: bool) {
+        self.events.push_back(ClientEvent::ConnectionClosed(by_remote));
     }
 
 }

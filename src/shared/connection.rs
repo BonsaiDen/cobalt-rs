@@ -25,6 +25,9 @@ const MAX_SEQ_NUMBER: u32 = 256;
 /// Number of bytes used by a packet header.
 const PACKET_HEADER_SIZE: usize = 14;
 
+/// The special packet data used for programmtic closure of the connection.
+const CLOSURE_PACKET_DATA: [u8; 6] = [170, 170, 85, 85, 85, 85];
+
 /// Enum indicating the state of a `SentPacketAck`.
 #[derive(Debug, PartialEq)]
 enum PacketState {
@@ -61,6 +64,9 @@ pub enum ConnectionState {
     /// The remote did not send any packets within the maximum configured time
     /// frame between any two packets.
     Lost,
+
+    /// The connection is currently closing.
+    Closing,
 
     /// The connection has been closed programmatically.
     Closed
@@ -227,7 +233,9 @@ impl Connection {
     /// packets.
     pub fn open(&self) -> bool {
         match self.state {
-            ConnectionState::Connecting | ConnectionState::Connected => true,
+            ConnectionState::Closing |
+            ConnectionState::Connecting |
+            ConnectionState::Connected => true,
             _ => false
         }
     }
@@ -455,41 +463,49 @@ impl Connection {
         packet.push((self.random_id.0 >> 8) as u8);
         packet.push(self.random_id.0 as u8);
 
-        // Set local sequence number
-        packet.push(self.local_seq_number as u8);
+        // Send closing packets if required
+        if self.state == ConnectionState::Closing {
+            packet.extend_from_slice(&CLOSURE_PACKET_DATA);
 
-        // Set packet ack number
-        packet.push(self.remote_seq_number as u8);
+        } else {
 
-        // Construct ack bitfield from most recently received packets
-        let mut bitfield: u32 = 0;
-        for seq in &self.recv_ack_queue {
+            // Set local sequence number
+            packet.push(self.local_seq_number as u8);
 
-            // Ignore the remote sequence as it already gets set in the header
-            if *seq != self.remote_seq_number {
+            // Set packet ack number
+            packet.push(self.remote_seq_number as u8);
 
-                // Calculate bitfield index
-                let bit = seq_bit_index(*seq, self.remote_seq_number);
+            // Construct ack bitfield from most recently received packets
+            let mut bitfield: u32 = 0;
+            for seq in &self.recv_ack_queue {
 
-                // Set ack bit
-                if bit < MAX_ACK_BITS {
-                    bitfield |= (1 << bit) as u32;
+                // Ignore the remote sequence as it already gets set in the header
+                if *seq != self.remote_seq_number {
+
+                    // Calculate bitfield index
+                    let bit = seq_bit_index(*seq, self.remote_seq_number);
+
+                    // Set ack bit
+                    if bit < MAX_ACK_BITS {
+                        bitfield |= (1 << bit) as u32;
+                    }
+
                 }
 
             }
 
+            // Set ack bitfield
+            packet.push((bitfield >> 24) as u8);
+            packet.push((bitfield >> 16) as u8);
+            packet.push((bitfield >> 8) as u8);
+            packet.push(bitfield as u8);
+
+            // Write messages from queue into the packet
+            self.message_queue.send_packet(
+                &mut packet, self.config.packet_max_size - PACKET_HEADER_SIZE
+            );
+
         }
-
-        // Set ack bitfield
-        packet.push((bitfield >> 24) as u8);
-        packet.push((bitfield >> 16) as u8);
-        packet.push((bitfield >> 8) as u8);
-        packet.push(bitfield as u8);
-
-        // Write messages from queue into the packet
-        self.message_queue.send_packet(
-            &mut packet, self.config.packet_max_size - PACKET_HEADER_SIZE
-        );
 
         // Send packet to socket
         let bytes_sent = if cfg!(feature = "packet_handler_compress") {
@@ -565,7 +581,8 @@ impl Connection {
 
     /// Closes the connection, no further packets will be received or send.
     pub fn close(&mut self) {
-        self.state = ConnectionState::Closed;
+        self.config.connection_drop_threshold = 20;
+        self.state = ConnectionState::Closing;
     }
 
 
@@ -579,7 +596,11 @@ impl Connection {
         // Ignore any packets which do not match the desired protocol header
         &packet[0..4] == &self.config.protocol_header && match self.state {
 
-            ConnectionState::Lost | ConnectionState::Closed | ConnectionState::FailedToConnect => false,
+            ConnectionState::Lost |
+            ConnectionState::Closed |
+            ConnectionState::FailedToConnect => false,
+
+            ConnectionState::Closing => true,
 
             ConnectionState::Connecting => {
 
@@ -600,11 +621,19 @@ impl Connection {
 
             ConnectionState::Connected => {
 
-                // Check if the packet sequence number is more recent,
-                // otherwise drop it as a duplicate
-                seq_is_more_recent(
-                    packet[8] as u32, self.remote_seq_number
-                )
+                // Check for closure packet from remote
+                if &packet[8..14] == &CLOSURE_PACKET_DATA {
+                    self.state = ConnectionState::Closed;
+                    handler.connection_closed(owner, self, true);
+                    false
+
+                } else {
+                    // Check if the packet sequence number is more recent,
+                    // otherwise drop it as a duplicate
+                    seq_is_more_recent(
+                        packet[8] as u32, self.remote_seq_number
+                    )
+                }
 
             }
 
@@ -650,7 +679,22 @@ impl Connection {
                     true
                 }
 
+            },
+
+            ConnectionState::Closing => {
+
+                // Detect connection closure
+                if inactive_time > self.config.connection_drop_threshold {
+                    self.state = ConnectionState::Closed;
+                    handler.connection_closed(owner, self, false);
+                    false
+
+                } else {
+                    true
+                }
+
             }
+
         }
 
     }

@@ -77,12 +77,11 @@ fn test_client_stream_connect() {
     };
 
     // Setup Test Server
-    let server_address = address.clone();
     let server_thread = thread::spawn(move|| {
         let config = Config::default();
         let mut server_handler = MockServerHandler::new();
         let mut server = Server::new(config);
-        server.bind(&mut server_handler, server_address.unwrap()).unwrap();
+        server.bind(&mut server_handler, address.unwrap()).unwrap();
         assert_eq!(server_handler.received, [b"Hello World".to_vec()].to_vec());
     });
 
@@ -94,7 +93,7 @@ fn test_client_stream_connect() {
         .. Default::default()
     });
 
-    stream.connect(server_address.unwrap()).expect("ClientStream address already in use!");
+    stream.connect(address.unwrap()).expect("ClientStream address already in use!");
 
     // Wait and receive messages from server
     let mut received = Vec::new();
@@ -102,7 +101,7 @@ fn test_client_stream_connect() {
 
         while let Ok(event) = stream.receive() {
 
-            if received.len() == 0 || received[received.len() - 1] != event {
+            if received.is_empty() || received[received.len() - 1] != event {
                 if event == ClientEvent::ConnectionLost || event == ClientEvent::ConnectionFailed {
                     break 'wait;
 
@@ -215,7 +214,7 @@ impl Handler<Server> for MockServerHandler {
 
         }
 
-        if self.received.len() > 0 && self.send_count == 3 {
+        if !self.received.is_empty() && self.send_count == 3 {
             server.shutdown().unwrap();
         }
 

@@ -53,11 +53,97 @@ fn test_set_tick_rate() {
 }
 
 #[test]
-fn test_close() {
+fn test_close_local() {
+
+    let mut owner = MockOwner;
+    let mut handler = MockOwnerHandler;
+    let mut socket = MockSocket::new(Vec::new());
     let mut conn = connection();
+    let address = conn.peer_addr();
+
+    // Initiate closure
     conn.close();
+    assert_eq!(conn.open(), true);
+    assert!(conn.state() == ConnectionState::Closing);
+
+    // Connection should now be sending closing packets
+    let expected = vec![[
+        // protocol id
+        1, 2, 3, 4,
+
+        // connection id
+        (conn.id().0 >> 24) as u8,
+        (conn.id().0 >> 16) as u8,
+        (conn.id().0 >> 8) as u8,
+         conn.id().0 as u8,
+
+        170, // local sequence number
+        170, // remote sequence number
+        85, 85, 85, 85  // ack bitfield
+
+    ].to_vec(), [
+        // protocol id
+        1, 2, 3, 4,
+
+        // connection id
+        (conn.id().0 >> 24) as u8,
+        (conn.id().0 >> 16) as u8,
+        (conn.id().0 >> 8) as u8,
+         conn.id().0 as u8,
+
+        170, // local sequence number
+        170, // remote sequence number
+        85, 85, 85, 85  // ack bitfield
+
+    ].to_vec()];
+
+    socket.expect(expected);
+
+    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+
+    // Connection should close once the drop threshold is exceeded
+    thread::sleep(Duration::from_millis(30));
+    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+
     assert_eq!(conn.open(), false);
     assert!(conn.state() == ConnectionState::Closed);
+
+}
+
+#[test]
+fn test_close_remote() {
+
+    let mut owner = MockOwner;
+    let mut handler = MockOwnerHandler;
+    let mut conn = connection();
+
+    assert!(conn.state() == ConnectionState::Connecting);
+
+    // Receive initial packet
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        0, // local sequence number
+        0, // remote sequence number we confirm
+        0, 0, 0, 0 // bitfield
+
+    ].to_vec(), 0, &mut owner, &mut handler);
+
+    assert!(conn.state() == ConnectionState::Connected);
+
+    // Receive closure packet
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        170, // local sequence number
+        170, // remote sequence number we confirm
+        85, 85, 85, 85 // bitfield
+
+    ].to_vec(), 0, &mut owner, &mut handler);
+
+    assert_eq!(conn.open(), false);
+    assert!(conn.state() == ConnectionState::Closed);
+
 }
 
 #[test]

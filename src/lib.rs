@@ -186,7 +186,7 @@
 //!     }
 //!
 //!     // Send some messages
-//!     stream.send(MessageKind::Instant, b"Hello World".to_vec());
+//!     stream.send(MessageKind::Instant, b"Hello World".to_vec()).ok();
 //!
 //!     // Send outgoing messages
 //!     stream.flush().ok();

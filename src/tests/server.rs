@@ -142,8 +142,7 @@ impl Handler<Server> for ConnectionServerHandler {
         // expect 1 message from each connection
         for (id, conn) in connections.iter_mut() {
             match *id {
-                ConnectionID(1) => check_messages(conn),
-                ConnectionID(2) => check_messages(conn),
+                ConnectionID(1...2) => check_messages(conn),
                 _ => unreachable!("Invalid connection ID")
             }
         }
@@ -391,7 +390,7 @@ impl Socket for MockSocket {
     -> Result<usize, Error> {
 
         // Don't run out of expected packets
-        if self.send_packets.len() == 0 {
+        if self.send_packets.is_empty() {
             panic!(format!("Expected at most {} packet(s) to be send over socket.", self.send_count));
         }
 
