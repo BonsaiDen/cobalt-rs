@@ -26,7 +26,7 @@ const MAX_SEQ_NUMBER: u32 = 256;
 const PACKET_HEADER_SIZE: usize = 14;
 
 /// The special packet data used for programmtic closure of the connection.
-const CLOSURE_PACKET_DATA: [u8; 6] = [170, 170, 85, 85, 85, 85];
+const CLOSURE_PACKET_DATA: [u8; 6] = [0, 128, 85, 85, 85, 85];
 
 /// Enum indicating the state of a `SentPacketAck`.
 #[derive(Debug, PartialEq)]

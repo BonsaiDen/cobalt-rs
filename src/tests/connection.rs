@@ -77,9 +77,7 @@ fn test_close_local() {
         (conn.id().0 >> 8) as u8,
          conn.id().0 as u8,
 
-        170, // local sequence number
-        170, // remote sequence number
-        85, 85, 85, 85  // ack bitfield
+        0, 128, 85, 85, 85, 85  // closure packet data
 
     ].to_vec(), [
         // protocol id
@@ -91,9 +89,7 @@ fn test_close_local() {
         (conn.id().0 >> 8) as u8,
          conn.id().0 as u8,
 
-        170, // local sequence number
-        170, // remote sequence number
-        85, 85, 85, 85  // ack bitfield
+        0, 128, 85, 85, 85, 85 // closure packet data
 
     ].to_vec()];
 
@@ -135,9 +131,7 @@ fn test_close_remote() {
     conn.receive_packet([
         1, 2, 3, 4,
         0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
-        170, // local sequence number
-        170, // remote sequence number we confirm
-        85, 85, 85, 85 // bitfield
+        0, 128, 85, 85, 85, 85 // closure packet data
 
     ].to_vec(), 0, &mut owner, &mut handler);
 
