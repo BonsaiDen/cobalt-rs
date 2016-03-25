@@ -24,7 +24,7 @@ extern crate cobalt;
 ```
 
 You can also enable optional features such as handlers for lost packets or
-packet compression inside `Cargo.toml`:
+packet compression inside your `Cargo.toml`:
 
 ```toml
 [dependencies.cobalt]

@@ -80,7 +80,8 @@ impl ClientStream {
         }
     }
 
-    /// Creates an new client stream from an existing client instance.
+    /// Consumes the passed in `Client` instance converting it into a
+    /// `ClientStream`.
     pub fn from_client(client: Client) -> ClientStream {
         ClientStream {
             handler: StreamHandler::new(),

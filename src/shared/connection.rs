@@ -25,8 +25,11 @@ const MAX_SEQ_NUMBER: u32 = 256;
 /// Number of bytes used by a packet header.
 const PACKET_HEADER_SIZE: usize = 14;
 
-/// The special packet data used for programmtic closure of the connection.
-const CLOSURE_PACKET_DATA: [u8; 6] = [0, 128, 85, 85, 85, 85];
+/// Special packet data used to notify of programmtic connection closure.
+const CLOSURE_PACKET_DATA: [u8; 6] = [
+    0, 128, // Most distant sequence numbers
+    85, 85, 85, 85 // ack bitfield with every second bit set
+];
 
 /// Enum indicating the state of a `SentPacketAck`.
 #[derive(Debug, PartialEq)]
@@ -65,7 +68,7 @@ pub enum ConnectionState {
     /// frame between any two packets.
     Lost,
 
-    /// The connection is currently closing.
+    /// The connection is about to be closed.
     Closing,
 
     /// The connection has been closed programmatically.
@@ -73,15 +76,18 @@ pub enum ConnectionState {
 
 }
 
-/// Representation of a random id for connection identification.
+/// Representation of a random ID for connection identification purposes.
 ///
-/// Used to uniquely\* identify the reliable connections. The id is send with
-/// every packet and is especially helpful in the case of NAT re-assigning
-/// local UDP ports which would make a address based identification unreliable.
+/// Used to uniquely\* identify the reliable connections. The ID is send with
+/// every packet and allows to support multiple connections behind NAT. It also
+/// reduces the chance of connection drop attacks it also and helps with cases
+/// where NAT re-assigns local UDP ports which would cause purely address based
+/// packet identification mechanisms to break down.
 ///
-/// > \* Since the id is random integer, there is of course a very small chance
-/// > for two clients to end up using the same id, in that case - due to
-/// conflicting ack sequences and message data - both will get dropped shortly.
+/// > \* Since the ID is random integer, there is of course a always a chance
+/// > for two connections to end up with the same ID, in that case - due to
+/// conflicting ack sequences and message data - both connections will get
+/// dropped shortly.
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 pub struct ConnectionID(pub u32);
 
