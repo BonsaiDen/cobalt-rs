@@ -139,6 +139,30 @@ fn test_client_stream_connect() {
 }
 
 #[test]
+fn test_client_stream_reset() {
+
+    let mut stream = ClientStream::new(Config {
+        send_rate: 5,
+        connection_init_threshold: 100,
+        connection_drop_threshold: 100,
+        .. Default::default()
+    });
+
+    stream.connect("127.0.0.1:9999").expect("ClientStream address already in use!");
+    stream.reset().ok();
+
+    // Should not reset the stream's peer_addr
+    assert_eq!(
+        stream.peer_addr().ok(),
+        Some(net::SocketAddr::V4(
+            net::SocketAddrV4::new(net::Ipv4Addr::new(127, 0, 0, 1), 9999)
+        ))
+    );
+
+}
+
+
+#[test]
 fn test_client_stream_reconnect() {
 
     let mut stream = ClientStream::new(Config {

@@ -372,7 +372,7 @@ impl <S: Socket>ClientState<S> {
     /// Returns the socket address for the remote end of this client's
     /// underlying connection.
     pub fn peer_addr(&self) -> SocketAddr {
-        self.connection.peer_addr()
+        self.peer_address
     }
 
     /// Overrides the configuration of this client's underlying connection.
