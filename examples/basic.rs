@@ -47,6 +47,10 @@ impl Handler<Server> for ServerHandler {
         println!("Server::connection_lost");
     }
 
+    fn connection_closed(&mut self, _: &mut Server, _: &mut Connection, _: bool) {
+        println!("Server::connection_closed");
+    }
+
 }
 
 struct ClientHandler;
@@ -88,6 +92,10 @@ impl Handler<Client> for ClientHandler {
     fn connection_lost(&mut self, client: &mut Client, _: &mut Connection) {
         println!("Client::connection_lost");
         client.close().unwrap();
+    }
+
+    fn connection_closed(&mut self, _: &mut Client, _: &mut Connection, _: bool) {
+        println!("Client::connection_closed");
     }
 
 }
