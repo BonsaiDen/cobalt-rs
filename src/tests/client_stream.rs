@@ -108,8 +108,11 @@ fn test_client_stream_connect() {
                 } else {
                     if event == ClientEvent::Connection  {
                         stream.send(MessageKind::Instant, b"Hello World".to_vec()).unwrap();
+                        received.push(event);
+
+                    } else if event != ClientEvent::Tick {
+                        received.push(event);
                     }
-                    received.push(event);
                 }
             }
 
@@ -124,14 +127,10 @@ fn test_client_stream_connect() {
 
     assert_eq!(received, vec![
         ClientEvent::Connect,
-        ClientEvent::Tick,
         ClientEvent::Connection,
         ClientEvent::Message([0].to_vec()),
-        ClientEvent::Tick,
         ClientEvent::Message([1].to_vec()),
-        ClientEvent::Tick,
-        ClientEvent::Message([2].to_vec()),
-        ClientEvent::Tick
+        ClientEvent::Message([2].to_vec())
     ]);
 
     stream.close().unwrap();
