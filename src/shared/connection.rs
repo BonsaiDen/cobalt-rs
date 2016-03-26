@@ -619,9 +619,7 @@ impl Connection {
 
                 handler.connection(owner, self);
 
-                // The connection handler might decide to immediately disconnect
-                // us, so we check out state again
-                self.state == ConnectionState::Connected
+                true
 
             },
 
