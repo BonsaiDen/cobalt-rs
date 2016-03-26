@@ -2,7 +2,6 @@ extern crate cobalt;
 
 use std::net;
 use std::thread;
-use std::time::Duration;
 use std::collections::HashMap;
 use cobalt::{Client, Connection, ConnectionID, Config, Handler, Server};
 
@@ -312,11 +311,12 @@ impl Handler<Server> for MockServerHandler {
         self.connection_lost_calls += 1;
     }
 
-    fn connection_closed(&mut self, server: &mut Server, _: &mut Connection, by_remote: bool) {
+    fn connection_closed(&mut self, _: &mut Server, _: &mut Connection, by_remote: bool) {
         self.connection_closed_calls += 1;
         self.closed_by_remote = by_remote;
-        thread::sleep(Duration::from_millis(50));
-        server.shutdown().unwrap();
+        self.tick_connections_calls = 0;
+        self.shutdown_ticks = 5;
+        self.close_connection = false;
     }
 
 }

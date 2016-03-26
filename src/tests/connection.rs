@@ -666,7 +666,8 @@ fn test_rtt_tick_correction() {
 fn test_packet_loss() {
 
     struct PacketLossHandler {
-        packet_lost_calls: u32
+        packet_lost_calls: u32,
+        connection_calls: u32
     }
 
     impl Handler<MockOwner> for PacketLossHandler {
@@ -680,6 +681,12 @@ fn test_packet_loss() {
                 1, 0, 0, 15, 80, 97, 99, 107, 101, 116, 32, 82, 101, 108, 105, 97, 98, 108, 101,
                 2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
             ].to_vec(), packet);
+        }
+
+        fn connection(&mut self, _: &mut MockOwner, conn: &mut Connection) {
+            // Packet loss should have been reset
+            assert_eq!(conn.packet_loss(), 0.0);
+            self.connection_calls += 1;
         }
 
     }
@@ -696,7 +703,8 @@ fn test_packet_loss() {
     let mut conn = Connection::new(config, local_address, peer_address, limiter);
     let mut owner = MockOwner;
     let mut handler = PacketLossHandler {
-        packet_lost_calls: 0
+        packet_lost_calls: 0,
+        connection_calls: 0
     };
 
     let mut socket = MockSocket::new(vec![
@@ -758,6 +766,8 @@ fn test_packet_loss() {
 
     ].to_vec(), 0, &mut owner, &mut handler);
 
+    assert_eq!(handler.connection_calls, 1);
+
     // RTT should be left untouched the lost packet
     assert_eq!(conn.rtt(), 0);
 
@@ -780,7 +790,7 @@ fn test_packet_loss() {
 
     ].to_vec(), 0, &mut owner, &mut handler);
 
-    // But packet loss should now go down
+    // Packet loss should now go down
     assert_eq!(conn.packet_loss(), 50.0);
 
 }
