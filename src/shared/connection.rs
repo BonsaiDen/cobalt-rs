@@ -356,7 +356,7 @@ impl Connection {
 
                 // Calculate the roundtrip time from acknowledged packets
                 if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
-                    self.acked_packets += 1;
+                    self.acked_packets = self.acked_packets.wrapping_add(1);
                     self.smoothed_rtt = moving_average(
                         self.smoothed_rtt,
                         (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay) as f32
@@ -368,7 +368,7 @@ impl Connection {
                 } else if self.last_receive_time - ack.time
                         > self.config.packet_drop_threshold {
 
-                    self.lost_packets += 1;
+                    self.lost_packets = self.lost_packets.wrapping_add(1);
                     ack.state = PacketState::Lost;
                     ack.packet.take()
 
@@ -420,7 +420,7 @@ impl Connection {
         }
 
         // Update packet statistics
-        self.recv_packets += 1;
+        self.recv_packets = self.recv_packets.wrapping_add(1);
 
     }
 
@@ -558,7 +558,7 @@ impl Connection {
         }
 
         // Update packet statistics
-        self.sent_packets += 1;
+        self.sent_packets = self.sent_packets.wrapping_add(1);
 
         // Dismiss any pending, received messages
         self.message_queue.dismiss();
