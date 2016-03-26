@@ -655,7 +655,9 @@ impl Connection {
 
         match self.state {
 
-            ConnectionState::Lost | ConnectionState::Closed | ConnectionState::FailedToConnect => false,
+            ConnectionState::Lost |
+            ConnectionState::Closed |
+            ConnectionState::FailedToConnect => false,
 
             ConnectionState::Connecting => {
 
@@ -725,8 +727,8 @@ fn seq_bit_index(seq: u32, ack: u32) -> u32 {
 }
 
 fn seq_is_more_recent(a: u32, b: u32) -> bool {
-    (a > b) && (a - b <= MAX_SEQ_NUMBER / 2)
-    || (b > a) && (b - a > MAX_SEQ_NUMBER / 2)
+    (a > b) && (a - b <= MAX_SEQ_NUMBER / 2) ||
+    (b > a) && (b - a >  MAX_SEQ_NUMBER / 2)
 }
 
 fn seq_was_acked(seq: u32, ack: u32, bitfield: u32) -> bool {
