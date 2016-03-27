@@ -2,6 +2,7 @@ extern crate cobalt;
 
 use std::net;
 use std::thread;
+use std::time::Duration;
 use std::collections::HashMap;
 use cobalt::{Client, Connection, ConnectionID, Config, Handler, Server};
 
@@ -112,22 +113,43 @@ fn test_server_client_connection_close() {
     let server_address = address.clone();
     let server_thread = thread::spawn(move|| {
 
-        let config = Config::default();
-        let mut server_handler = MockServerHandler::new(35, true);
+        let config = Config {
+            connection_init_threshold: 1000,
+            .. Default::default()
+        };
+
+        let mut server_handler = MockServerHandler::new(5, true);
         let mut server = Server::new(config);
         server.bind(&mut server_handler, server_address.unwrap()).unwrap();
 
+        assert_eq!(server_handler.connection_lost_calls, 0);
+        assert_eq!(server_handler.connection_calls, 1);
         assert_eq!(server_handler.connection_closed_calls, 1);
         assert_eq!(server_handler.closed_by_remote, false);
 
     });
 
-    let config = Config::default();
+    let config = Config {
+        connection_init_threshold: 1000,
+        .. Default::default()
+    };
+
+    // TODO cause might be connection marked as dropped by client and
+    // an attempted reconnect?
+    // client might not receive the closure frame in time?
+    //
+    // TODO another cause might be that the server thinks the connection is
+    // already lost before having send the closure packets? this might explain
+    // why the client reconnects afterwards
+
     let mut client_handler = MockClientHandler::new();
     let mut client = Client::new(config);
+    thread::sleep(Duration::from_millis(50));
     client.connect(&mut client_handler, address.unwrap()).unwrap();
 
     server_thread.join().unwrap();
+    assert_eq!(client_handler.connection_lost_calls, 0);
+    assert_eq!(client_handler.connection_calls, 1);
     assert_eq!(client_handler.connection_closed_calls, 1);
     assert_eq!(client_handler.closed_by_remote, true);
 
@@ -270,14 +292,23 @@ impl Handler<Server> for MockServerHandler {
             assert_eq!(*id, conn.id());
         }
 
+        // only advance until initial connection close
+        // when there is a connection
+        if connections.len() == 0 && self.close_connection {
+            self.tick_connections_calls = 0;
+        }
+
         self.tick_connections_calls += 1;
 
-        if self.tick_connections_calls > self.shutdown_ticks {
+        if self.tick_connections_calls == self.shutdown_ticks {
+
+            // close the client connection the first time around
             if self.close_connection {
                 for (_, conn) in connections.iter_mut() {
                     conn.close();
                 }
 
+            // shutdown the server
             } else {
                 server.shutdown().unwrap();
             }
