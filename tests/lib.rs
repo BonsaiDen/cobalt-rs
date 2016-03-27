@@ -30,7 +30,7 @@ fn test_client_connection_failure() {
 fn test_server_bind_and_shutdown() {
 
     let config = Config::default();
-    let mut handler = MockServerHandler::new(0, false);
+    let mut handler = MockServerHandler::new(1, false);
     let mut server = Server::new(config);
     server.bind(&mut handler, "127.0.0.1:0").unwrap();
 
@@ -61,7 +61,7 @@ fn test_server_client_connection_lost() {
     let server_thread = thread::spawn(move|| {
 
         let config = Config::default();
-        let mut server_handler = MockServerHandler::new(35, false);
+        let mut server_handler = MockServerHandler::new(15, false);
         let mut server = Server::new(config);
         server.bind(&mut server_handler, server_address.unwrap()).unwrap();
 
