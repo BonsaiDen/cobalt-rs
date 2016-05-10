@@ -517,17 +517,19 @@ impl Connection {
         let bytes_sent = if cfg!(feature = "packet_handler_compress") {
 
             // Optional packet compression
-            let remaining = handler.connection_packet_compress(
-                owner, self, &mut packet[PACKET_HEADER_SIZE..]
+            let packet = handler.connection_packet_compress(
+                owner, self,
+                packet[..PACKET_HEADER_SIZE].to_vec(),
+                &mut packet[PACKET_HEADER_SIZE..]
             );
 
             socket.send_to(
-                &packet[..PACKET_HEADER_SIZE + remaining], *addr
+                &packet[..], *addr
 
             ).expect(&format!("Failed to send compressed packet to {:?}", addr));
 
             // Number of all bytes sent
-            remaining + PACKET_HEADER_SIZE
+            packet.len()
 
         } else {
             socket.send_to(

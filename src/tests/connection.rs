@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use std::net;
+use std::iter;
 use std::thread;
 use std::time::Duration;
 use std::io::{Error, ErrorKind};
@@ -807,19 +808,32 @@ fn test_packet_compression() {
     impl Handler<MockOwner> for PacketCompressionHandler {
 
         fn connection_packet_compress(
-            &mut self, _: &mut MockOwner, _: &mut Connection, data: &mut [u8]
-        ) -> usize {
+            &mut self, _: &mut MockOwner, conn: &mut Connection,
+            packet: Vec<u8>, data: &[u8]
+        ) -> Vec<u8> {
 
             self.packet_compress_calls += 1;
+
+            // Packet should already contain header
+            assert_eq!([
+                1, 2, 3, 4,
+                (conn.id().0 >> 24) as u8,
+                (conn.id().0 >> 16) as u8,
+                (conn.id().0 >> 8) as u8,
+                 conn.id().0 as u8,
+                0, 0,
+                0, 0, 0, 0
+
+            ].to_vec(), &packet[..]);
 
             // Expect actual packet data
             assert_eq!([
                 0, 0, 0, 3, 70, 111, 111, // Foo
                 0, 0, 0, 3, 66, 97, 114 // Bar
-            ].to_vec(), data);
+            ].to_vec(), &data[..]);
 
             // Return a empty compression result
-            0
+            packet
         }
 
         fn connection_packet_decompress(
@@ -904,6 +918,75 @@ fn test_packet_compression() {
         b"Foo".to_vec(),
         b"Bar".to_vec(),
     ]);
+
+}
+
+#[cfg(feature = "packet_handler_compress")]
+#[test]
+fn test_packet_compression_inflated() {
+
+    struct PacketCompressionHandler {
+        packet_compress_calls: u32
+    }
+
+    impl Handler<MockOwner> for PacketCompressionHandler {
+
+        fn connection_packet_compress(
+            &mut self, _: &mut MockOwner, _: &mut Connection,
+            mut packet: Vec<u8>, data: &[u8]
+        ) -> Vec<u8> {
+
+            self.packet_compress_calls += 1;
+
+            // Expect actual packet data
+            assert_eq!(data.len(), 0);
+
+            let mut buffer: Vec<u8> = iter::repeat(74).take(16).collect();
+            packet.append(&mut buffer);
+
+            // Return a compression result that is bigger than the input
+            packet
+        }
+
+    }
+
+    let config = Config {
+        // set a low threshold for packet loss
+        packet_drop_threshold: 10,
+        .. Config::default()
+    };
+
+    let local_address: net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    let peer_address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
+    let limiter = BinaryRateLimiter::new(&config);
+    let mut conn = Connection::new(config, local_address, peer_address, limiter);
+    let mut owner = MockOwner;
+    let mut handler = PacketCompressionHandler {
+        packet_compress_calls: 0
+    };
+
+    let mut socket = MockSocket::new(vec![
+        [
+            1, 2, 3, 4,
+            (conn.id().0 >> 24) as u8,
+            (conn.id().0 >> 16) as u8,
+            (conn.id().0 >> 8) as u8,
+             conn.id().0 as u8,
+            0,
+            0,
+            0, 0, 0, 0,
+
+            // Compression handler will insert additional packet data here
+            74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74
+
+        ].to_vec()
+    ]);
+
+    // First we send a packet to test compression
+    conn.send_packet(&mut socket, &peer_address, &mut owner, &mut handler);
+
+    // Compress handler should have been called once
+    assert_eq!(handler.packet_compress_calls, 1);
 
 }
 

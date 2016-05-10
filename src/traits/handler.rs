@@ -90,11 +90,12 @@ pub trait Handler<T> {
 
     }
 
-    /// Method that is called for in-place compression purposes before a packet
-    /// is send over the connection's underlying socket.
+    /// Method that is called for compression purposes before a packet is send
+    /// over the connection's underlying socket.
     ///
-    /// The returned `usize` should indicate the number of data bytes left
-    /// *after* the in-place compression has been applied.
+    /// The method receives a `packet` argument which already contains the
+    /// required packet headers. Compressed data should be *appended* to this
+    /// vector before the vector is returned.
     ///
     /// The default implementation does not actually perform any kind of
     /// compression and leaves the data untouched.
@@ -102,10 +103,11 @@ pub trait Handler<T> {
     /// > Note: This method is feature-gated and will only be included when the
     /// > `packet_handler_compress` feature is enabled.
     fn connection_packet_compress(
-        &mut self, _: &mut T, _: &mut Connection, data: &mut [u8]
+        &mut self, _: &mut T, _: &mut Connection, mut packet: Vec<u8>, data: &[u8]
 
-    ) -> usize {
-        data.len()
+    ) -> Vec<u8> {
+        packet.extend_from_slice(data);
+        packet
     }
 
     /// Method that is called for decompression purposes after a packet is
