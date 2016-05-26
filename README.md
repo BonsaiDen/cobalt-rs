@@ -5,7 +5,7 @@ connections over UDP](http://gafferongames.com/networking-for-game-programmers/u
 It also comes with a messaging layer for the sending of un-/reliable and/or 
 ordered messages.
 
-- [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt)
+- [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt) for the latest release.
 
 
 ## Usage
@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-cobalt = "0.11.0"
+cobalt = "0.12.0"
 ```
 
 and this to your crate root:
@@ -28,7 +28,7 @@ packet compression inside your `Cargo.toml`:
 
 ```toml
 [dependencies.cobalt]
-version = "0.11.0"
+version = "0.12.0"
 features = ["packet_handler_lost", "packet_handler_compress"]
 ```
 
@@ -38,6 +38,7 @@ Licensed under either of
  * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 at your option.
+
 
 ### Contribution
 
