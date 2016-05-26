@@ -308,5 +308,6 @@ mod tests {
     mod connection;
     mod message_queue;
     mod server;
+    mod mock;
 }
 

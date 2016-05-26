@@ -5,18 +5,15 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
-
 use std::net;
 use std::thread;
 use std::time::Duration;
-use std::collections::HashMap;
 use std::io::ErrorKind;
-use super::super::{
-    Client, ClientStream, ClientEvent, Config, Connection, ConnectionID,
-    Handler, MessageKind, Stats, Server
-};
 
+use super::mock::MockServerHandler;
+use super::super::{
+    Client, ClientStream, ClientEvent, Config, MessageKind, Stats, Server
+};
 
 #[test]
 fn test_client_stream() {
@@ -160,7 +157,6 @@ fn test_client_stream_reset() {
 
 }
 
-
 #[test]
 fn test_client_stream_reconnect() {
 
@@ -199,49 +195,6 @@ fn test_client_stream_reconnect() {
         ClientEvent::Connect,
         ClientEvent::Tick,
     ]);
-
-}
-
-pub struct MockServerHandler {
-    send_count: u8,
-    pub received: Vec<Vec<u8>>
-}
-
-impl MockServerHandler {
-    pub fn new() -> MockServerHandler {
-        MockServerHandler {
-            send_count: 0,
-            received: Vec::new()
-        }
-    }
-}
-
-impl Handler<Server> for MockServerHandler {
-
-    fn tick_connections(
-        &mut self, server: &mut Server,
-        connections: &mut HashMap<ConnectionID, Connection>
-    ) {
-
-        // Ensure hashmap and connection object have the same id
-        for (_, conn) in connections.iter_mut() {
-
-            if self.send_count < 3 {
-                conn.send(MessageKind::Instant, [self.send_count].to_vec());
-                self.send_count += 1;
-            }
-
-            for msg in conn.received() {
-                self.received.push(msg);
-            }
-
-        }
-
-        if !self.received.is_empty() && self.send_count == 3 {
-            server.shutdown().unwrap();
-        }
-
-    }
 
 }
 

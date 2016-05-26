@@ -9,30 +9,20 @@ use std::net;
 use std::iter;
 use std::thread;
 use std::time::Duration;
-use std::io::{Error, ErrorKind};
-use std::sync::mpsc::{channel, Receiver, TryRecvError};
 
+use super::mock::{MockOwner, MockOwnerHandler, MockSocket};
 use super::super::{
     BinaryRateLimiter,
     Connection,
     ConnectionState,
     Config,
     MessageKind,
-    Handler,
-    Socket
+    Handler
 };
-
-fn connection() -> Connection {
-    let config = Config::default();
-    let local_address: net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
-    let peer_address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-    let limiter = BinaryRateLimiter::new(&config);
-    Connection::new(config, local_address, peer_address, limiter)
-}
 
 #[test]
 fn test_create() {
-    let conn = connection();
+    let conn = create_connection();
     assert_eq!(conn.open(), true);
     assert_eq!(conn.congested(), false);
     assert!(conn.state() == ConnectionState::Connecting);
@@ -46,7 +36,7 @@ fn test_create() {
 
 #[test]
 fn test_set_tick_rate() {
-    let mut conn = connection();
+    let mut conn = create_connection();
     conn.set_config(Config {
         send_rate: 10,
         .. Config::default()
@@ -59,7 +49,7 @@ fn test_close_local() {
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
     let mut socket = MockSocket::new(Vec::new());
-    let mut conn = connection();
+    let mut conn = create_connection();
     let address = conn.peer_addr();
 
     // Initiate closure
@@ -68,7 +58,7 @@ fn test_close_local() {
     assert!(conn.state() == ConnectionState::Closing);
 
     // Connection should now be sending closing packets
-    let expected = vec![[
+    let expected = vec![("255.1.1.2:5678", [
         // protocol id
         1, 2, 3, 4,
 
@@ -80,7 +70,7 @@ fn test_close_local() {
 
         0, 128, 85, 85, 85, 85  // closure packet data
 
-    ].to_vec(), [
+    ].to_vec()), ("255.1.1.2:5678", [
         // protocol id
         1, 2, 3, 4,
 
@@ -92,7 +82,7 @@ fn test_close_local() {
 
         0, 128, 85, 85, 85, 85 // closure packet data
 
-    ].to_vec()];
+    ].to_vec())];
 
     socket.expect(expected);
 
@@ -112,7 +102,7 @@ fn test_close_remote() {
 
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
-    let mut conn = connection();
+    let mut conn = create_connection();
 
     assert!(conn.state() == ConnectionState::Connecting);
 
@@ -143,7 +133,7 @@ fn test_close_remote() {
 
 #[test]
 fn test_reset() {
-    let mut conn = connection();
+    let mut conn = create_connection();
     conn.close();
     conn.reset();
     assert_eq!(conn.open(), true);
@@ -153,7 +143,7 @@ fn test_reset() {
 #[test]
 fn test_send_sequence_wrap_around() {
 
-    let mut conn = connection();
+    let mut conn = create_connection();
     let address = conn.peer_addr();
     let mut socket = MockSocket::new(Vec::new());
     let mut owner = MockOwner;
@@ -161,7 +151,7 @@ fn test_send_sequence_wrap_around() {
 
     for i in 0..256 {
 
-        let expected = vec![[
+        let expected = vec![("255.1.1.2:5678", [
             // protocol id
             1, 2, 3, 4,
 
@@ -175,7 +165,7 @@ fn test_send_sequence_wrap_around() {
             0, // remote sequence number
             0, 0, 0, 0  // ack bitfield
 
-        ].to_vec()];
+        ].to_vec())];
 
         socket.expect(expected);
 
@@ -184,7 +174,7 @@ fn test_send_sequence_wrap_around() {
     }
 
     // Should now have wrapped around
-    let expected = vec![[
+    let expected = vec![("255.1.1.2:5678", [
         // protocol id
         1, 2, 3, 4,
 
@@ -198,7 +188,7 @@ fn test_send_sequence_wrap_around() {
         0, // remote sequence number
         0, 0, 0, 0  // ack bitfield
 
-    ].to_vec()];
+    ].to_vec())];
 
     socket.expect(expected);
 
@@ -209,12 +199,12 @@ fn test_send_sequence_wrap_around() {
 #[test]
 fn test_send_and_receive_packet() {
 
-    let mut conn = connection();
+    let mut conn = create_connection();
     let address = conn.peer_addr();
-    let mut expected_packets: Vec<Vec<u8>> = Vec::new();
+    let mut expected_packets: Vec<(&'static str, Vec<u8>)> = Vec::new();
 
     // Initial packet
-    expected_packets.push([
+    expected_packets.push(("255.1.1.2:5678", [
         // protocol id
         1, 2, 3, 4,
 
@@ -228,10 +218,10 @@ fn test_send_and_receive_packet() {
         0, // remote sequence number
         0, 0, 0, 0  // ack bitfield
 
-    ].to_vec());
+    ].to_vec()));
 
     // Write packet
-    expected_packets.push([
+    expected_packets.push(("255.1.1.2:5678", [
         1, 2, 3, 4,
         (conn.id().0 >> 24) as u8,
         (conn.id().0 >> 16) as u8,
@@ -241,10 +231,10 @@ fn test_send_and_receive_packet() {
         0,
         0, 0, 0, 0
 
-    ].to_vec());
+    ].to_vec()));
 
     // Empty again
-    expected_packets.push([
+    expected_packets.push(("255.1.1.2:5678", [
         1, 2, 3, 4,
         (conn.id().0 >> 24) as u8,
         (conn.id().0 >> 16) as u8,
@@ -255,11 +245,11 @@ fn test_send_and_receive_packet() {
         0,
         0, 0, 0, 0
 
-    ].to_vec());
+    ].to_vec()));
 
 
     // Ack Bitfield test
-    expected_packets.push([
+    expected_packets.push(("255.1.1.2:5678", [
         1, 2, 3, 4,
         (conn.id().0 >> 24) as u8,
         (conn.id().0 >> 16) as u8,
@@ -272,11 +262,13 @@ fn test_send_and_receive_packet() {
         // Ack bitfield
         0, 0, 3, 128 // 0000_0000 0000_0000 0000_0011 1000_0000
 
-    ].to_vec());
+    ].to_vec()));
 
 
     // Testing
-    let mut socket = MockSocket::new(expected_packets);
+    let mut socket = MockSocket::new(vec![]);
+    socket.expect(expected_packets);
+
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
 
@@ -336,14 +328,15 @@ fn test_send_and_receive_packet() {
 #[test]
 fn test_send_and_receive_messages() {
 
-    let mut conn = connection();
+    let mut conn = create_connection();
     let address = conn.peer_addr();
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
 
     // Expected packet data
-    let mut socket = MockSocket::new(vec![
-        [
+    let mut socket = MockSocket::new(vec![]);
+    socket.expect(vec![
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -368,8 +361,8 @@ fn test_send_and_receive_messages() {
             // World
             2, 1, 0, 5, 87, 111, 114, 108, 100
 
-        ].to_vec(),
-        [
+        ].to_vec()),
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -379,7 +372,7 @@ fn test_send_and_receive_messages() {
             1,
             0, 0, 0, 1
 
-        ].to_vec()
+        ].to_vec())
     ]);
 
     // Test Message Sending
@@ -452,7 +445,7 @@ fn test_send_and_receive_messages() {
 #[test]
 fn test_receive_invalid_packets() {
 
-    let mut conn = connection();
+    let mut conn = create_connection();
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
 
@@ -470,13 +463,14 @@ fn test_receive_invalid_packets() {
 #[test]
 fn test_rtt() {
 
-    let mut conn = connection();
+    let mut conn = create_connection();
     let address = conn.peer_addr();
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
 
-    let mut socket = MockSocket::new(vec![
-        [
+    let mut socket = MockSocket::new(vec![]);
+    socket.expect(vec![
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -485,8 +479,8 @@ fn test_rtt() {
             0,
             0,
             0, 0, 0, 0
-        ].to_vec(),
-        [
+        ].to_vec()),
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -495,8 +489,8 @@ fn test_rtt() {
             1,
             0,
             0, 0, 0, 0
-        ].to_vec(),
-        [
+        ].to_vec()),
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -505,8 +499,8 @@ fn test_rtt() {
             2,
             1,
             0, 0, 0, 1
-        ].to_vec(),
-        [
+        ].to_vec()),
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -515,8 +509,8 @@ fn test_rtt() {
             3,
             2,
             0, 0, 0, 3
-        ].to_vec(),
-        [
+        ].to_vec()),
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -525,8 +519,8 @@ fn test_rtt() {
             4,
             3,
             0, 0, 0, 7
-        ].to_vec(),
-        [
+        ].to_vec()),
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -535,7 +529,7 @@ fn test_rtt() {
             5,
             4,
             0, 0, 0, 15
-        ].to_vec()
+        ].to_vec())
     ]);
 
     assert_eq!(conn.rtt(), 0);
@@ -624,13 +618,14 @@ fn test_rtt() {
 #[test]
 fn test_rtt_tick_correction() {
 
-    let mut conn = connection();
+    let mut conn = create_connection();
     let address = conn.peer_addr();
     let mut owner = MockOwner;
     let mut handler = MockOwnerHandler;
 
-    let mut socket = MockSocket::new(vec![
-        [
+    let mut socket = MockSocket::new(vec![]);
+    socket.expect(vec![
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -639,9 +634,8 @@ fn test_rtt_tick_correction() {
             0,
             0,
             0, 0, 0, 0
-        ].to_vec()
+        ].to_vec())
     ]);
-
     assert_eq!(conn.rtt(), 0);
 
     // First packet
@@ -708,8 +702,9 @@ fn test_packet_loss() {
         connection_calls: 0
     };
 
-    let mut socket = MockSocket::new(vec![
-        [
+    let mut socket = MockSocket::new(vec![]);
+    socket.expect(vec![
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -728,8 +723,8 @@ fn test_packet_loss() {
             // Packet 3
             2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
 
-        ].to_vec(),
-        [
+        ].to_vec()),
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -745,9 +740,8 @@ fn test_packet_loss() {
             // Packet 3
             2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
 
-        ].to_vec()
+        ].to_vec())
     ]);
-
     conn.send(MessageKind::Instant, b"Packet Instant".to_vec());
     conn.send(MessageKind::Reliable, b"Packet Reliable".to_vec());
     conn.send(MessageKind::Ordered, b"Packet Ordered".to_vec());
@@ -871,8 +865,9 @@ fn test_packet_compression() {
         packet_decompress_calls: 0
     };
 
-    let mut socket = MockSocket::new(vec![
-        [
+    let mut socket = MockSocket::new(vec![]);
+    socket.expect(vec![
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -884,7 +879,7 @@ fn test_packet_compression() {
 
             // Compression Handler will remove all packet data here
 
-        ].to_vec()
+        ].to_vec())
     ]);
 
     // First we send a packet to test compression
@@ -965,8 +960,9 @@ fn test_packet_compression_inflated() {
         packet_compress_calls: 0
     };
 
-    let mut socket = MockSocket::new(vec![
-        [
+    let mut socket = MockSocket::new(vec![]);
+    socket.expect(vec![
+        ("255.1.1.2:5678", [
             1, 2, 3, 4,
             (conn.id().0 >> 24) as u8,
             (conn.id().0 >> 16) as u8,
@@ -979,7 +975,7 @@ fn test_packet_compression_inflated() {
             // Compression handler will insert additional packet data here
             74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74
 
-        ].to_vec()
+        ].to_vec())
     ]);
 
     // First we send a packet to test compression
@@ -990,65 +986,13 @@ fn test_packet_compression_inflated() {
 
 }
 
-// Owner Mock -----------------------------------------------------------------
-pub struct MockOwner;
-pub struct MockOwnerHandler;
-impl Handler<MockOwner> for MockOwnerHandler {}
 
-
-// Socket Mock ----------------------------------------------------------------
-pub struct MockSocket {
-    send_packets: Vec<Vec<u8>>,
-    send_index: usize,
-    receiver: Receiver<(net::SocketAddr, Vec<u8>)>
-}
-
-impl MockSocket {
-
-    pub fn new(send_packets: Vec<Vec<u8>>) -> MockSocket {
-
-        let (_, receiver) = channel::<(net::SocketAddr, Vec<u8>)>();
-
-        MockSocket {
-            send_packets: send_packets,
-            send_index: 0,
-            receiver: receiver
-        }
-    }
-
-    pub fn expect(&mut self, send_packets: Vec<Vec<u8>>) {
-        self.send_index = 0;
-        self.send_packets = send_packets;
-    }
-
-}
-
-impl Socket for MockSocket {
-
-    fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
-        self.receiver.try_recv()
-    }
-
-    fn send_to(
-        &mut self, data: &[u8], _: net::SocketAddr)
-    -> Result<usize, Error> {
-
-        // Don't run out of expected packets
-        if self.send_index >= self.send_packets.len() {
-            panic!(format!("Expected at most {} packet(s) to be send over socket.", self.send_packets.len()));
-        }
-
-        // Verify packet data
-        assert_eq!(data, &self.send_packets[self.send_index][..]);
-
-        self.send_index += 1;
-        Ok(0)
-
-    }
-
-    fn local_addr(&self) -> Result<net::SocketAddr, Error> {
-        Err(Error::new(ErrorKind::AddrNotAvailable, ""))
-    }
-
+// Helpers --------------------------------------------------------------------
+fn create_connection() -> Connection {
+    let config = Config::default();
+    let local_address: net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    let peer_address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
+    let limiter = BinaryRateLimiter::new(&config);
+    Connection::new(config, local_address, peer_address, limiter)
 }
 
