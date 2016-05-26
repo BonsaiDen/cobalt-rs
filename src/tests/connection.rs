@@ -1025,7 +1025,7 @@ impl MockSocket {
 
 impl Socket for MockSocket {
 
-    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
+    fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
         self.receiver.try_recv()
     }
 
@@ -1048,10 +1048,6 @@ impl Socket for MockSocket {
 
     fn local_addr(&self) -> Result<net::SocketAddr, Error> {
         Err(Error::new(ErrorKind::AddrNotAvailable, ""))
-    }
-
-    fn shutdown(&mut self) {
-
     }
 
 }

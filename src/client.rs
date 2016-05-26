@@ -294,7 +294,6 @@ impl Client {
 
             handler.close(self);
             state.connection.reset();
-            state.socket.shutdown();
 
             self.peer_address = None;
             self.local_address = None;

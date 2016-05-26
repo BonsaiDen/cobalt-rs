@@ -381,12 +381,13 @@ impl MockSocket {
 
 impl Socket for MockSocket {
 
-    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
+    fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
         self.receiver.try_recv()
     }
 
     fn send_to(
         &mut self, data: &[u8], addr: net::SocketAddr)
+
     -> Result<usize, Error> {
 
         // Don't run out of expected packets
@@ -427,10 +428,6 @@ impl Socket for MockSocket {
     fn local_addr(&self) -> Result<net::SocketAddr, Error> {
         let ip = net::Ipv4Addr::new(0, 0, 0, 0);
         Ok(net::SocketAddr::V4(net::SocketAddrV4::new(ip, 12345)))
-    }
-
-    fn shutdown(&mut self) {
-
     }
 
 }

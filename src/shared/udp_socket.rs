@@ -8,20 +8,14 @@
 use std::net;
 use std::fmt;
 use std::iter;
-use std::thread;
-use std::time::Duration;
 use std::io::Error;
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::TryRecvError;
 use super::super::traits::socket::Socket;
 
 /// Non-blocking abstraction over a UDP socket.
-///
-/// The non-blocking behavior is implement by using a internal reader thread.
 pub struct UdpSocket {
     socket: net::UdpSocket,
-    reader_thread: Option<thread::JoinHandle<()>>,
-    udp_receiver: Receiver<(net::SocketAddr, Vec<u8>)>,
-    close_sender: Sender<()>
+    buffer: Vec<u8>
 }
 
 impl UdpSocket {
@@ -33,47 +27,17 @@ impl UdpSocket {
     ) -> Result<Self, Error> {
 
         // Create the send socket
-        let sender = try!(net::UdpSocket::bind(address));
+        let socket = try!(net::UdpSocket::bind(address));
 
-        // Clone the socket handle for use inside the reader thread
-        let reader = try!(sender.try_clone());
+        // Switch into non-blocking mode
+        try!(socket.set_nonblocking(true));
 
-        // Configure read timeout so we can eventually exit our receive loop
-        try!(reader.set_read_timeout(Some(Duration::from_millis(10))));
+        // Allocate receival buffer
+        let buffer: Vec<u8> = iter::repeat(0).take(max_packet_size).collect();
 
-        // Create communication channels
-        let (s_udp, r_udp) = channel::<(net::SocketAddr, Vec<u8>)>();
-        let (s_close, r_close) = channel::<()>();
-
-        // Create Reader Thread
-        let reader_thread = thread::spawn(move|| {
-
-            // Allocate buffer for the maximum packet size
-            let mut buffer: Vec<u8> = iter::repeat(0).take(max_packet_size).collect();
-            loop {
-
-                // Receive packets...
-                if let Ok((len, src)) = reader.recv_from(&mut buffer) {
-
-                    // Copy only the actual number of bytes and send them
-                    // along with the source address
-                    s_udp.send((src, buffer[..len].to_vec())).ok();
-
-                // ...until shutdown is received
-                } else if let Ok(_) = r_close.try_recv() {
-                    break;
-                }
-
-            }
-
-        });
-
-        // Return the combined structure
         Ok(UdpSocket {
-            socket: sender,
-            reader_thread: Some(reader_thread),
-            udp_receiver: r_udp,
-            close_sender: s_close
+            socket: socket,
+            buffer: buffer
         })
 
     }
@@ -83,8 +47,14 @@ impl UdpSocket {
 impl Socket for UdpSocket {
 
     /// Attempts to return a incoming packet on this socket without blocking.
-    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
-        self.udp_receiver.try_recv()
+    fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
+
+        if let Ok((len, src)) = self.socket.recv_from(&mut self.buffer) {
+            Ok((src, self.buffer[..len].to_vec()))
+
+        } else {
+            Err(TryRecvError::Empty)
+        }
     }
 
     /// Send data on the socket to the given address. On success, returns the
@@ -101,29 +71,6 @@ impl Socket for UdpSocket {
         self.socket.local_addr()
     }
 
-    /// Shuts down the socket by stopping its internal reader thread.
-    fn shutdown(&mut self) {
-
-        // Only shutdown if we still got a reader thread
-        if let Some(reader_thread) = self.reader_thread.take() {
-
-            // Notify the reader thread to exit
-            self.close_sender.send(()).unwrap();
-
-            // Finally wait for the reader thread to exit cleanly
-            reader_thread.join().unwrap();
-
-        }
-
-    }
-
-}
-
-impl Drop for UdpSocket {
-    fn drop(&mut self) {
-        // Make sure to exit the internal thread cleanly
-        self.shutdown();
-    }
 }
 
 impl fmt::Debug for UdpSocket {

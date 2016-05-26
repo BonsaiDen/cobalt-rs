@@ -226,9 +226,6 @@ impl Server {
             conn.reset();
         }
 
-        // Close the UDP socket
-        socket.shutdown();
-
         Ok(())
 
     }
