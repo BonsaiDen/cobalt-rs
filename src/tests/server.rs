@@ -124,13 +124,8 @@ fn test_server_connections() {
 
     }
 
-    let config = Config::default();
-
-    let mut handler = ConnectionServerHandler {
-        connection_count: 0
-    };
-
-    let mut socket = MockSocket::new([
+    let socket = MockSocket::from_address("127.0.0.1:0");
+    socket.receive(vec![
 
         // create a new connection from address 1
         ("127.0.0.1:1234", [
@@ -174,11 +169,23 @@ fn test_server_connections() {
 
         ].to_vec())
 
-    ].to_vec());
+    ]);
+
+    let mut socket_handle = socket.handle();
+
+    // Server
+    let config = Config::default();
+    let mut server = Server::new(config);
+    let mut handler = ConnectionServerHandler {
+        connection_count: 0
+    };
+    server.bind_to_socket(&mut handler, socket).unwrap();
+
+    // Expect 2 connections in total
+    assert_eq!(handler.connection_count, 2);
 
     // Expect one packet to be send to each connection
-    socket.expect([
-        // TODO order depends on how the ID is hashed...
+    socket_handle.assert_sent_sort_by_addr(vec![
         ("127.0.0.1:1234", [
             1, 2, 3, 4,  // Protocol Header
             0, 0, 0, 0,  // Ignored Connection ID
@@ -194,14 +201,7 @@ fn test_server_connections() {
             0, 0, 0, 1
 
         ].to_vec())
-
-    ].to_vec());
-
-    let mut server = Server::new(config);
-    server.bind_to_socket(&mut handler, socket).unwrap();
-
-    // expect 2 connections
-    assert_eq!(handler.connection_count, 2);
+    ]);
 
 }
 
@@ -241,13 +241,8 @@ fn test_server_connection_remapping() {
 
     }
 
-    let config = Config::default();
-
-    let mut handler = ConnectionRemapServerHandler {
-        connection_count: 0
-    };
-
-    let mut socket = MockSocket::new([
+    let socket = MockSocket::from_address("127.0.0.1:0");
+    socket.receive(vec![
 
         // create a new connection from address 1
         ("127.0.0.1:1234", [
@@ -270,10 +265,20 @@ fn test_server_connection_remapping() {
 
         ].to_vec())
 
-    ].to_vec());
+    ]);
+
+    let mut socket_handle = socket.handle();
+
+    // Server
+    let config = Config::default();
+    let mut server = Server::new(config);
+    let mut handler = ConnectionRemapServerHandler {
+        connection_count: 0
+    };
+    server.bind_to_socket(&mut handler, socket).unwrap();
 
     // Expect one packet for connection 1 to be send to address 2
-    socket.expect([
+    socket_handle.assert_sent(vec![
         ("127.0.0.1:5678", [
             1, 2, 3, 4,  // Protocol Header
             0, 0, 0, 0,  // Ignored Connection ID
@@ -282,10 +287,7 @@ fn test_server_connection_remapping() {
 
         ].to_vec())
 
-    ].to_vec());
-
-    let mut server = Server::new(config);
-    server.bind_to_socket(&mut handler, socket).unwrap();
+    ]);
 
     // expect 1 connection
     assert_eq!(handler.connection_count, 1);
