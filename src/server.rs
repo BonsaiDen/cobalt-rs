@@ -5,18 +5,14 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
 
-use std::cmp;
-use std::thread;
-use std::time::Duration;
 use std::io::{Error, ErrorKind};
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::udp_socket::UdpSocket;
 use shared::stats::{StatsCollector, Stats};
-use super::{Config, Connection, ConnectionID, Handler};
+use super::{Config, Connection, ConnectionID, Handler, tick};
 
 /// Implementation of a multi-client server with handler based event dispatch.
 #[derive(Debug)]
@@ -104,11 +100,10 @@ impl Server {
         handler.bind(self);
 
         // Receive and send until we shut down.
+        let mut tick_overflow = 0;
         while !self.closed {
 
-            // Get current time to correct tick delay in order to achieve
-            // a more stable tick rate
-            let begin = clock_ticks::precise_time_ns();
+            let tick_start = tick::start();
             let tick_delay = 1000000000 / self.config.send_rate;
 
             // Receive all incoming UDP packets to our local address
@@ -201,17 +196,7 @@ impl Server {
 
             }
 
-            // Calculate spend time in current loop iteration and limit ticks
-            // accordingly
-
-            // TODO: In case we spent more time than the tick_delay, make the
-            // next tick faster in order to compensate.
-            thread::sleep(
-                Duration::new(0, tick_delay - cmp::min(
-                    (clock_ticks::precise_time_ns() - begin) as u32,
-                    tick_delay
-                ))
-            );
+            tick::end(tick_delay, tick_start, &mut tick_overflow);
 
         }
 
