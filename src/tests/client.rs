@@ -8,7 +8,7 @@
 use std::net::SocketAddr;
 
 use super::mock::{
-    MockClientHandler,
+    MockTickDelayClientHandler,
     MockSyncClientHandler,
     MockClientStatsHandler
 };
@@ -18,11 +18,12 @@ use super::super::{Client, Config, MessageKind, Stats};
 fn test_client_tick_delay() {
 
     let config = Config {
-        send_rate: 10,
+        send_rate: 30,
+        connection_init_threshold: 1000,
         .. Config::default()
     };
 
-    let mut handler = MockClientHandler {
+    let mut handler = MockTickDelayClientHandler {
         last_tick_time: 0,
         tick_count: 0,
         accumulated: 0
@@ -31,7 +32,8 @@ fn test_client_tick_delay() {
     let mut client = Client::new(config);
     client.connect(&mut handler, "127.0.0.1:12345").unwrap();
 
-    assert!(handler.accumulated <= 350);
+    // Check overall time usage
+    assert!(handler.accumulated <= 275);
 
 }
 

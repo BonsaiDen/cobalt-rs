@@ -253,13 +253,13 @@ impl MockSocketHandle {
 
 
 // Client Mocks ---------------------------------------------------------------
-pub struct MockClientHandler {
+pub struct MockTickDelayClientHandler {
     pub last_tick_time: u32,
     pub tick_count: u32,
     pub accumulated: i32
 }
 
-impl Handler<Client> for MockClientHandler {
+impl Handler<Client> for MockTickDelayClientHandler {
 
     fn connect(&mut self, _: &mut Client) {
         self.last_tick_time = precise_time_ms();
@@ -270,23 +270,44 @@ impl Handler<Client> for MockClientHandler {
         // Accumulate time so we can check that the artificial delay
         // was correct for by the servers tick loop
         if self.tick_count > 1 {
-            self.accumulated += (precise_time_ms() - self.last_tick_time) as i32;
+
+            let delay = (precise_time_ms() - self.last_tick_time) as i32;
+
+            // These ticks should have been slowed down to our fake load
+            if self.tick_count <= 4 {
+                assert!(delay >= 75); // We would expect exactly 75
+
+            // These should be speed up by the server for correction
+            } else if self.tick_count <= 9 {
+                assert!(delay <= 5); // We would expect exactly 0
+
+            // The final tick should be peformed at 30 fps again
+            } else {
+                assert!(delay >= 30 && delay <= 40); // We would expect exactly 33
+            }
+
+            self.accumulated += delay;
+
         }
 
         self.last_tick_time = precise_time_ms();
         self.tick_count += 1;
 
-        if self.tick_count == 5 {
+        // We'll effectively have run N - 2 ticks
+        if self.tick_count == 11 {
             client.close().unwrap();
         }
 
-        // Fake some load inside of the tick handler
-        let before = precise_time_ms();
-        thread::sleep(Duration::from_millis(75));
+        // Fake some load inside of the tick handler for the first few ticks
+        if self.tick_count < 5 {
 
-        // Compensate for slow timers
-        let spend = (precise_time_ms() - before) as i32;
-        self.accumulated -= spend - 75;
+            let before = precise_time_ms();
+            thread::sleep(Duration::from_millis(75));
+
+            // Compensate for timers inaccuracy
+            let extra_waited = (precise_time_ms() - before) as i32;
+            self.accumulated -= extra_waited - 75;
+        }
 
     }
 
@@ -341,6 +362,156 @@ impl Handler<Client> for MockClientStatsHandler {
 
 
 // Server Mocks ----------------------------------------------------------------------
+pub struct MockTickDelayServerHandler {
+    pub last_tick_time: u32,
+    pub tick_count: u32,
+    pub accumulated: i32
+}
+
+impl Handler<Server> for MockTickDelayServerHandler {
+
+    fn bind(&mut self, _: &mut Server) {
+        self.last_tick_time = precise_time_ms();
+    }
+
+    fn tick_connections(
+        &mut self, server: &mut Server,
+        _: &mut HashMap<ConnectionID, Connection>
+    ) {
+
+        // Accumulate time so we can check that the artificial delay
+        // was correct for by the servers tick loop
+        if self.tick_count > 1 {
+
+            let delay = (precise_time_ms() - self.last_tick_time) as i32;
+
+            // These ticks should have been slowed down to our fake load
+            if self.tick_count <= 4 {
+                assert!(delay >= 75); // We expect exactly 75
+
+            // These should be speed up by the server for correction
+            } else if self.tick_count <= 9 {
+                assert!(delay <= 5); // We expect exactly 0
+
+            // The final tick should be peformed at 30 fps again
+            } else {
+                assert!(delay >= 33 && delay <= 40); // We expect exactly 33
+            }
+
+            self.accumulated += delay;
+
+        }
+
+        self.last_tick_time = precise_time_ms();
+        self.tick_count += 1;
+
+        // We'll effectively have run N - 2 ticks
+        if self.tick_count == 11 {
+            server.shutdown().unwrap();
+        }
+
+        // Fake some load inside of the tick handler for the first few ticks
+        if self.tick_count < 5 {
+
+            let before = precise_time_ms();
+            thread::sleep(Duration::from_millis(75));
+
+            // Compensate for timers inaccuracy
+            let extra_waited = (precise_time_ms() - before) as i32;
+            self.accumulated -= extra_waited - 75;
+        }
+
+    }
+
+}
+
+pub struct MockConnectionServerHandler {
+    pub connection_count: i32
+}
+
+impl Handler<Server> for MockConnectionServerHandler {
+
+    fn connection(&mut self, _: &mut Server, _: &mut Connection) {
+        self.connection_count += 1;
+    }
+
+    fn tick_connections(
+        &mut self, server: &mut Server,
+        connections: &mut HashMap<ConnectionID, Connection>
+    ) {
+
+        // expect 1 message from each connection
+        for (id, conn) in connections.iter_mut() {
+            match *id {
+                ConnectionID(1...2) => check_server_messages(conn),
+                _ => unreachable!("Invalid connection ID")
+            }
+        }
+
+        server.shutdown().unwrap();
+
+    }
+
+}
+
+pub struct MockConnectionRemapServerHandler {
+    pub connection_count: i32
+}
+
+impl Handler<Server> for MockConnectionRemapServerHandler {
+
+    fn connection(&mut self, _: &mut Server, conn: &mut Connection) {
+        let ip = net::Ipv4Addr::new(127, 0, 0, 1);
+        let addr = net::SocketAddr::V4(net::SocketAddrV4::new(ip, 1234));
+        assert_eq!(conn.peer_addr(), addr);
+        self.connection_count += 1;
+    }
+
+    fn tick_connections(
+        &mut self, server: &mut Server,
+        connections: &mut HashMap<ConnectionID, Connection>
+    ) {
+
+        // expect 1 message from the connection
+        for (id, conn) in connections.iter_mut() {
+            let ip = net::Ipv4Addr::new(127, 0, 0, 1);
+            let addr = net::SocketAddr::V4(net::SocketAddrV4::new(ip, 5678));
+            assert_eq!(*id, ConnectionID(1));
+            assert_eq!(conn.peer_addr(), addr);
+            check_server_messages(conn);
+        }
+
+        server.shutdown().unwrap();
+
+    }
+
+}
+
+pub struct MockServerStatsHandler {
+    pub tick_count: u32,
+}
+
+impl Handler<Server> for MockServerStatsHandler {
+
+    fn connect(&mut self, _: &mut Server) {
+    }
+
+    fn tick_connections(
+        &mut self, server: &mut Server,
+        _: &mut HashMap<ConnectionID, Connection>
+    ) {
+
+        //conn.send(MessageKind::Instant, b"Hello World".to_vec());
+        self.tick_count += 1;
+
+        if self.tick_count == 20 {
+            server.shutdown().unwrap();
+        }
+
+    }
+
+}
+
 pub struct MockServerHandler {
     send_count: u8,
     pub received: Vec<Vec<u8>>
@@ -386,11 +557,25 @@ impl Handler<Server> for MockServerHandler {
 
 
 // Helpers --------------------------------------------------------------------
+fn check_server_messages(conn: &mut Connection) {
+
+    let mut messages = Vec::new();
+    for m in conn.received() {
+        messages.push(m);
+    }
+
+    assert_eq!(messages, [
+        [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100].to_vec()
+
+    ].to_vec())
+
+}
+
 fn to_socket_addr<T: ToSocketAddrs>(address: T) -> net::SocketAddr {
     address.to_socket_addrs().unwrap().nth(0).unwrap()
 }
 
-pub fn precise_time_ms() -> u32 {
+fn precise_time_ms() -> u32 {
     (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 
