@@ -26,10 +26,12 @@ use super::super::{
 
 macro_rules! assert_epsilon {
     ($value:ident, $target:expr, $difference:expr) => {
-        let min = $target - $difference;
-        let max = $target + $difference;
-        if $value < min || $value > max {
-            panic!(format!("Value {} not in range {} - {}", $value, min, max));
+        {
+            let min = $target - $difference;
+            let max = $target + $difference;
+            if $value < min || $value > max {
+                panic!(format!("Value {} not in range {} - {}", $value, min, max));
+            }
         }
     }
 }
