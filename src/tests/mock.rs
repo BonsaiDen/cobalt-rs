@@ -24,6 +24,15 @@ use super::super::{
     Server, Client
 };
 
+macro_rules! assert_epsilon {
+    ($value:ident, $target:expr, $difference:expr) => {
+        let min = $target - $difference;
+        let max = $target + $difference;
+        if $value < min || $value > max {
+            panic!(format!("Value {} not in range {} - {}", $value, min, max));
+        }
+    }
+}
 
 // Owner Mocks ----------------------------------------------------------------
 pub struct MockOwner;
@@ -275,15 +284,15 @@ impl Handler<Client> for MockTickDelayClientHandler {
 
             // These ticks should have been slowed down to our fake load
             if self.tick_count <= 4 {
-                assert!(delay >= 75); // We would expect exactly 75
+                assert_epsilon!(delay, 75, 10);
 
             // These should be speed up by the server for correction
             } else if self.tick_count <= 9 {
-                assert!(delay <= 5); // We would expect exactly 0
+                assert_epsilon!(delay, 0, 5);
 
             // The final tick should be peformed at 30 fps again
             } else {
-                assert!(delay >= 28 && delay <= 45); // We would expect exactly 33
+                assert_epsilon!(delay, 33, 10);
             }
 
             self.accumulated += delay;
@@ -360,7 +369,6 @@ impl Handler<Client> for MockClientStatsHandler {
 
 }
 
-
 // Server Mocks ----------------------------------------------------------------------
 pub struct MockTickDelayServerHandler {
     pub last_tick_time: u32,
@@ -387,15 +395,15 @@ impl Handler<Server> for MockTickDelayServerHandler {
 
             // These ticks should have been slowed down to our fake load
             if self.tick_count <= 4 {
-                assert!(delay >= 75); // We expect exactly 75
+                assert_epsilon!(delay, 75, 10);
 
             // These should be speed up by the server for correction
             } else if self.tick_count <= 9 {
-                assert!(delay <= 5); // We expect exactly 0
+                assert_epsilon!(delay, 0, 5);
 
             // The final tick should be peformed at 30 fps again
             } else {
-                assert!(delay >= 28 && delay <= 45); // We would expect exactly 33
+                assert_epsilon!(delay, 33, 10);
             }
 
             self.accumulated += delay;
