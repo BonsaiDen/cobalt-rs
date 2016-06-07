@@ -283,7 +283,7 @@ impl Handler<Client> for MockTickDelayClientHandler {
 
             // The final tick should be peformed at 30 fps again
             } else {
-                assert!(delay >= 30 && delay <= 40); // We would expect exactly 33
+                assert!(delay >= 28 && delay <= 45); // We would expect exactly 33
             }
 
             self.accumulated += delay;
@@ -395,7 +395,7 @@ impl Handler<Server> for MockTickDelayServerHandler {
 
             // The final tick should be peformed at 30 fps again
             } else {
-                assert!(delay >= 33 && delay <= 40); // We expect exactly 33
+                assert!(delay >= 28 && delay <= 45); // We would expect exactly 33
             }
 
             self.accumulated += delay;

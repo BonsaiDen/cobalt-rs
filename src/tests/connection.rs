@@ -64,7 +64,7 @@ fn test_close_local() {
     ].to_vec())]);
 
     // Connection should close once the drop threshold is exceeded
-    thread::sleep(Duration::from_millis(30));
+    thread::sleep(Duration::from_millis(90));
     conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
     socket_handle.assert_sent_none();
 
