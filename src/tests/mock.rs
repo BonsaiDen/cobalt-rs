@@ -296,7 +296,6 @@ impl MockTickRecorder {
 
     fn tick(&mut self) -> bool {
 
-
         if self.tick_count > 1 {
 
             let cooldown_ticks = (self.load_ticks as f32 / self.rate_factor).ceil() as u32;
@@ -306,17 +305,17 @@ impl MockTickRecorder {
             // Load ticks are expected to take twice as long
             if self.tick_count <= self.load_ticks + 1 {
                 assert_epsilon!(delay, (self.tick_delay * 2) as i32, 10);
-                //println!("{} {} - {} (load)", self.tick_count, delay, self.accumulated);
+                println!("{} {} - {} (load)", self.tick_count, delay, self.accumulated);
 
             // Cooldown ticks are expected to take tick_delay - tick_delay * rate_factor
             } else if self.tick_count <= self.load_ticks + 1 + cooldown_ticks {
                 let expected = self.tick_delay - (self.tick_delay as f32 * self.rate_factor).floor().max(0.0) as u32;
                 assert_epsilon!(delay, expected as i32, 10);
-                //println!("{} {} - {} (cooldown) {}", self.tick_count, delay, self.accumulated, expected);
+                println!("{} {} - {} (cooldown) {}", self.tick_count, delay, self.accumulated, expected);
 
             } else {
                 assert_epsilon!(delay, self.tick_delay as i32, 10);
-                //println!("{} {} - {} (normal)", self.tick_count, delay, self.accumulated);
+                println!("{} {} - {} (normal)", self.tick_count, delay, self.accumulated);
             }
 
         }
