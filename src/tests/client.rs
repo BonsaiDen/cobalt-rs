@@ -10,30 +10,60 @@ use std::net::SocketAddr;
 use super::mock::{
     MockTickDelayClientHandler,
     MockSyncClientHandler,
-    MockClientStatsHandler
+    MockClientStatsHandler,
+    MockTickRecorder
 };
 use super::super::{Client, Config, MessageKind, Stats};
 
 #[test]
-fn test_client_tick_delay() {
-
-    let config = Config {
-        send_rate: 30,
-        connection_init_threshold: 1000,
-        .. Config::default()
-    };
+fn test_client_tick_delay_no_overflow() {
 
     let mut handler = MockTickDelayClientHandler {
-        last_tick_time: 0,
-        tick_count: 0,
-        accumulated: 0
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.0)
     };
 
-    let mut client = Client::new(config);
-    client.connect(&mut handler, "127.0.0.1:12345").unwrap();
+    let mut server = Client::new(Config {
+        send_rate: 30,
+        connection_init_threshold: 1000,
+        tick_overflow_recovery: false,
+        tick_overflow_recovery_rate: 0.0,
+        .. Config::default()
+    });
+    server.connect(&mut handler, "127.0.0.1:12345").unwrap();
 
-    // Check overall time usage
-    assert!(handler.accumulated <= 275);
+}
+
+#[test]
+fn test_client_tick_delay_overflow_half() {
+
+    let mut handler = MockTickDelayClientHandler {
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.5)
+    };
+
+    let mut server = Client::new(Config {
+        send_rate: 30,
+        connection_init_threshold: 1000,
+        tick_overflow_recovery_rate: 0.5,
+        .. Config::default()
+    });
+    server.connect(&mut handler, "127.0.0.1:12345").unwrap();
+
+}
+
+#[test]
+fn test_client_tick_delay_overflow_one() {
+
+    let mut handler = MockTickDelayClientHandler {
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 1.0)
+    };
+
+    let mut server = Client::new(Config {
+        send_rate: 30,
+        connection_init_threshold: 1000,
+        tick_overflow_recovery_rate: 1.0,
+        .. Config::default()
+    });
+    server.connect(&mut handler, "127.0.0.1:12345").unwrap();
 
 }
 

@@ -264,62 +264,99 @@ impl MockSocketHandle {
 
 
 // Client Mocks ---------------------------------------------------------------
-pub struct MockTickDelayClientHandler {
-    pub last_tick_time: u32,
-    pub tick_count: u32,
+pub struct MockTickRecorder {
+    max_ticks: u32,
+    load_ticks: u32,
+    tick_delay: u32,
+    tick_count: u32,
+    last_tick_time: u32,
+    rate_factor: f32,
+    last_sleep_duration: u32,
     pub accumulated: i32
 }
 
-impl Handler<Client> for MockTickDelayClientHandler {
+impl MockTickRecorder {
 
-    fn connect(&mut self, _: &mut Client) {
+    pub fn new(max_ticks: u32, load_ticks: u32, send_rate: u32, rate_factor: f32) -> MockTickRecorder {
+        MockTickRecorder {
+            max_ticks: max_ticks,
+            load_ticks: load_ticks,
+            tick_delay: 1000 / send_rate,
+            tick_count: 0,
+            last_tick_time: 0,
+            rate_factor: rate_factor,
+            last_sleep_duration: 0,
+            accumulated: 0
+        }
+    }
+
+    fn init(&mut self) {
         self.last_tick_time = precise_time_ms();
     }
 
-    fn tick_connection(&mut self, client: &mut Client, _: &mut Connection) {
+    fn tick(&mut self) -> bool {
 
-        // Accumulate time so we can check that the artificial delay
-        // was correct for by the servers tick loop
+
         if self.tick_count > 1 {
 
-            let delay = (precise_time_ms() - self.last_tick_time) as i32;
-
-            // These ticks should have been slowed down to our fake load
-            if self.tick_count <= 4 {
-                assert_epsilon!(delay, 75, 10);
-
-            // These should be speed up by the server for correction
-            } else if self.tick_count <= 9 {
-                assert_epsilon!(delay, 0, 5);
-
-            // The final tick should be peformed at 30 fps again
-            } else {
-                assert_epsilon!(delay, 33, 10);
-            }
-
+            let cooldown_ticks = (self.load_ticks as f32 / self.rate_factor).ceil() as u32;
+            let delay = (precise_time_ms() - self.last_tick_time) as i32 - (self.last_sleep_duration as i32 - self.tick_delay as i32 * 2);
             self.accumulated += delay;
+
+            // Load ticks are expected to take twice as long
+            if self.tick_count <= self.load_ticks + 1 {
+                assert_epsilon!(delay, (self.tick_delay * 2) as i32, 10);
+                //println!("{} {} - {} (load)", self.tick_count, delay, self.accumulated);
+
+            // Cooldown ticks are expected to take tick_delay - tick_delay * rate_factor
+            } else if self.tick_count <= self.load_ticks + 1 + cooldown_ticks {
+                let expected = self.tick_delay - (self.tick_delay as f32 * self.rate_factor).floor().max(0.0) as u32;
+                assert_epsilon!(delay, expected as i32, 10);
+                //println!("{} {} - {} (cooldown) {}", self.tick_count, delay, self.accumulated, expected);
+
+            } else {
+                assert_epsilon!(delay, self.tick_delay as i32, 10);
+                //println!("{} {} - {} (normal)", self.tick_count, delay, self.accumulated);
+            }
 
         }
 
         self.last_tick_time = precise_time_ms();
         self.tick_count += 1;
 
-        // We'll effectively have run N - 2 ticks
-        if self.tick_count == 11 {
+        if self.tick_count == self.max_ticks + 2 {
+            true
+
+        // Fake load by waiting sleeping twice the normal tick delay
+        } else if self.tick_count > 1 && self.tick_count <= self.load_ticks + 1 {
+            let before = precise_time_ms();
+            thread::sleep(Duration::from_millis((self.tick_delay * 2) as u64));
+            self.last_sleep_duration = precise_time_ms() - before;
+            false
+
+        } else {
+            false
+        }
+
+    }
+
+}
+
+
+pub struct MockTickDelayClientHandler {
+    pub tick_recorder: MockTickRecorder
+}
+
+impl Handler<Client> for MockTickDelayClientHandler {
+
+    fn connect(&mut self, _: &mut Client) {
+        self.tick_recorder.init();
+    }
+
+    fn tick_connection(&mut self, client: &mut Client, _: &mut Connection) {
+        if self.tick_recorder.tick() {
             client.close().unwrap();
         }
-
-        // Fake some load inside of the tick handler for the first few ticks
-        if self.tick_count < 5 {
-
-            let before = precise_time_ms();
-            thread::sleep(Duration::from_millis(75));
-
-            // Compensate for timers inaccuracy
-            let extra_waited = (precise_time_ms() - before) as i32;
-            self.accumulated -= extra_waited - 75;
-        }
-
     }
 
 }
@@ -371,66 +408,24 @@ impl Handler<Client> for MockClientStatsHandler {
 
 }
 
-// Server Mocks ----------------------------------------------------------------------
+// Server Mocks ---------------------------------------------------------------
 pub struct MockTickDelayServerHandler {
-    pub last_tick_time: u32,
-    pub tick_count: u32,
-    pub accumulated: i32
+    pub tick_recorder: MockTickRecorder
 }
 
 impl Handler<Server> for MockTickDelayServerHandler {
 
     fn bind(&mut self, _: &mut Server) {
-        self.last_tick_time = precise_time_ms();
+        self.tick_recorder.init();
     }
 
     fn tick_connections(
         &mut self, server: &mut Server,
         _: &mut HashMap<ConnectionID, Connection>
     ) {
-
-        // Accumulate time so we can check that the artificial delay
-        // was correct for by the servers tick loop
-        if self.tick_count > 1 {
-
-            let delay = (precise_time_ms() - self.last_tick_time) as i32;
-
-            // These ticks should have been slowed down to our fake load
-            if self.tick_count <= 4 {
-                assert_epsilon!(delay, 75, 10);
-
-            // These should be speed up by the server for correction
-            } else if self.tick_count <= 9 {
-                assert_epsilon!(delay, 0, 5);
-
-            // The final tick should be peformed at 30 fps again
-            } else {
-                assert_epsilon!(delay, 33, 10);
-            }
-
-            self.accumulated += delay;
-
-        }
-
-        self.last_tick_time = precise_time_ms();
-        self.tick_count += 1;
-
-        // We'll effectively have run N - 2 ticks
-        if self.tick_count == 11 {
+        if self.tick_recorder.tick() {
             server.shutdown().unwrap();
         }
-
-        // Fake some load inside of the tick handler for the first few ticks
-        if self.tick_count < 5 {
-
-            let before = precise_time_ms();
-            thread::sleep(Duration::from_millis(75));
-
-            // Compensate for timers inaccuracy
-            let extra_waited = (precise_time_ms() - before) as i32;
-            self.accumulated -= extra_waited - 75;
-        }
-
     }
 
 }

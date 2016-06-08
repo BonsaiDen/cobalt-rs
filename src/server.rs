@@ -196,7 +196,7 @@ impl Server {
 
             }
 
-            tick::end(tick_delay, tick_start, &mut tick_overflow);
+            tick::end(tick_delay, tick_start, &mut tick_overflow, &self.config);
 
         }
 

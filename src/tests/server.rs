@@ -11,29 +11,57 @@ use super::mock::{
     MockTickDelayServerHandler,
     MockConnectionServerHandler,
     MockConnectionRemapServerHandler,
-    MockServerStatsHandler
+    MockServerStatsHandler,
+    MockTickRecorder
 };
 use super::super::{Config, Server, Stats};
 
 #[test]
-fn test_server_tick_delay() {
-
-    let config = Config {
-        send_rate: 30,
-        .. Config::default()
-    };
+fn test_server_tick_delay_no_overflow() {
 
     let mut handler = MockTickDelayServerHandler {
-        last_tick_time: 0,
-        tick_count: 0,
-        accumulated: 0
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.0)
     };
 
-    let mut server = Server::new(config);
+    let mut server = Server::new(Config {
+        send_rate: 30,
+        tick_overflow_recovery: false,
+        tick_overflow_recovery_rate: 0.0,
+        .. Config::default()
+    });
     server.bind(&mut handler, "127.0.0.1:0").unwrap();
 
-    // Check overall time usage
-    assert!(handler.accumulated <= 275);
+}
+
+#[test]
+fn test_server_tick_delay_overflow_half() {
+
+    let mut handler = MockTickDelayServerHandler {
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.5)
+    };
+
+    let mut server = Server::new(Config {
+        send_rate: 30,
+        tick_overflow_recovery_rate: 0.5,
+        .. Config::default()
+    });
+    server.bind(&mut handler, "127.0.0.1:0").unwrap();
+
+}
+
+#[test]
+fn test_server_tick_delay_overflow_one() {
+
+    let mut handler = MockTickDelayServerHandler {
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 1.0)
+    };
+
+    let mut server = Server::new(Config {
+        send_rate: 30,
+        tick_overflow_recovery_rate: 1.0,
+        .. Config::default()
+    });
+    server.bind(&mut handler, "127.0.0.1:0").unwrap();
 
 }
 

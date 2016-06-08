@@ -11,40 +11,51 @@ use std::cmp;
 use std::thread;
 use std::time::Duration;
 
+use super::Config;
+
 pub fn start() -> u64 {
     clock_ticks::precise_time_ns()
 }
 
-pub fn end(tick_delay: u32, begin: u64, time_overflow: &mut u32) {
+pub fn end(
+    tick_delay: u32,
+    tick_start: u64,
+    overflow: &mut u32,
+    config: &Config
+) {
 
     // Actual time taken by the tick
-    let time_taken = (clock_ticks::precise_time_ns() - begin) as u32;
+    let time_taken = (clock_ticks::precise_time_ns() - tick_start) as u32;
 
-    // Required wait time to keep tick rate
-    let mut wait = cmp::min(time_taken, tick_delay);
+    // Required delay reduction to keep tick rate
+    let mut reduction = cmp::min(time_taken, tick_delay);
 
-    // Keep track of how much additional time the current tick required
-    *time_overflow += time_taken - wait;
+    if config.tick_overflow_recovery {
 
-    // Try to reduce the existing overflow by reducing the wait time for the
-    // current frame. This we'll achieve a speed up effect in an effort to keep
-    // the desired tick rate stable over a longer period of time
-    // TODO should we stretch this out by only apply half of the available
-    // correction on each successive tick?
-    let available_correction = (tick_delay - wait) as i64;
-    let reduced_overflow = cmp::max(
-        0,
-        *time_overflow as i64 - available_correction
+        // Keep track of how much additional time the current tick required
+        *overflow += time_taken - reduction;
 
-    ) as u32;
+        // Try to reduce the existing overflow by reducing the reduction time
+        // for the current frame.
+        let max_correction = (tick_delay - reduction) as i64;
+        let correction = cmp::min(
+            (max_correction as f32 * config.tick_overflow_recovery_rate) as i64,
+            max_correction
+        );
 
-    // Adjust the wait perio
-    wait += *time_overflow - reduced_overflow;
+        // This way we'll achieve a speed up effect in an effort to keep the
+        // desired tick rate stable over a longer period of time
+        let reduced_overflow = cmp::max(0, *overflow as i64 - correction) as u32;
 
-    // Update remaining overflow
-    *time_overflow = reduced_overflow;
+        // Adjust the reduction amount to speed up
+        reduction += *overflow - reduced_overflow;
 
-    thread::sleep(Duration::new(0, tick_delay - wait));
+        // Update remaining overflow
+        *overflow = reduced_overflow;
+
+    }
+
+    thread::sleep(Duration::new(0, tick_delay - reduction));
 
 }
 

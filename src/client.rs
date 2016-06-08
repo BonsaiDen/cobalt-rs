@@ -127,7 +127,7 @@ impl Client {
             self.tick_sync(handler, &mut state);
             self.send_sync(handler, &mut state);
 
-            tick::end(tick_delay, tick_start, &mut tick_overflow);
+            tick::end(tick_delay, tick_start, &mut tick_overflow, &self.config);
 
         }
 
