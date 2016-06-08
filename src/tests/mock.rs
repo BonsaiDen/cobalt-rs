@@ -272,7 +272,7 @@ pub struct MockTickRecorder {
     last_tick_time: u32,
     rate_factor: f32,
     last_sleep_duration: u32,
-    pub accumulated: i32
+    overflow: i32
 }
 
 impl MockTickRecorder {
@@ -286,7 +286,7 @@ impl MockTickRecorder {
             last_tick_time: 0,
             rate_factor: rate_factor,
             last_sleep_duration: 0,
-            accumulated: 0
+            overflow: 0
         }
     }
 
@@ -298,24 +298,22 @@ impl MockTickRecorder {
 
         if self.tick_count > 1 {
 
-            let cooldown_ticks = (self.load_ticks as f32 / self.rate_factor).ceil() as u32;
             let delay = (precise_time_ms() - self.last_tick_time) as i32 - (self.last_sleep_duration as i32 - self.tick_delay as i32 * 2);
-            self.accumulated += delay;
 
             // Load ticks are expected to take twice as long
             if self.tick_count <= self.load_ticks + 1 {
+                self.overflow += delay - self.tick_delay as i32;
                 assert_epsilon!(delay, (self.tick_delay * 2) as i32, 10);
-                println!("{} {} - {} (load)", self.tick_count, delay, self.accumulated);
+                println!("{}) Taken: {} (load) (Builtup Overflow {})", self.tick_count, delay, self.overflow);
 
             // Cooldown ticks are expected to take tick_delay - tick_delay * rate_factor
-            } else if self.tick_count <= self.load_ticks + 1 + cooldown_ticks {
-                let expected = self.tick_delay - (self.tick_delay as f32 * self.rate_factor).floor().max(0.0) as u32;
-                assert_epsilon!(delay, expected as i32, 10);
-                println!("{} {} - {} (cooldown) {}", self.tick_count, delay, self.accumulated, expected);
-
             } else {
-                assert_epsilon!(delay, self.tick_delay as i32, 10);
-                println!("{} {} - {} (normal)", self.tick_count, delay, self.accumulated);
+                let expected_reduction = (self.tick_delay as f32 * self.rate_factor).ceil().max(0.0) as u32;
+                let available_reduction = cmp::min(self.overflow as u32, expected_reduction);
+                let expected = self.tick_delay - available_reduction;
+                assert_epsilon!(delay, expected as i32, 10);
+                self.overflow -= available_reduction as i32;
+                println!("{}) Taken: {} Expected: {} (cooldown) (Remaining Overflow: {}) ", self.tick_count, delay, expected, self.overflow);
             }
 
         }
