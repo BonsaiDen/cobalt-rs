@@ -238,6 +238,7 @@
 mod client;
 mod client_stream;
 mod server;
+mod tick;
 
 mod shared {
     pub mod binary_rate_limiter;
@@ -308,5 +309,6 @@ mod tests {
     mod connection;
     mod message_queue;
     mod server;
+    mod mock;
 }
 

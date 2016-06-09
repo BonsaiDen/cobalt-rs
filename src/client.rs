@@ -5,17 +5,13 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
 
-use std::cmp;
-use std::thread;
-use std::time::Duration;
 use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, ToSocketAddrs};
 use traits::socket::Socket;
 use shared::stats::{StatsCollector, Stats};
 use shared::udp_socket::UdpSocket;
-use super::{Config, ClientStream, Connection, Handler, MessageKind};
+use super::{Config, ClientStream, Connection, Handler, MessageKind, tick};
 
 /// Implementation of a single-server client with handler based event dispatch.
 ///
@@ -121,28 +117,17 @@ impl Client {
             self.connect_from_socket_sync(handler, addr, socket)
         );
 
+        let mut tick_overflow = 0;
         while self.running {
 
-            // Get current time to correct tick delay in order to achieve
-            // a more stable tick rate
-            let begin = clock_ticks::precise_time_ns();
+            let tick_start = tick::start();
             let tick_delay = 1000000000 / self.config.send_rate;
 
             self.receive_sync(handler, &mut state, tick_delay / 1000000);
             self.tick_sync(handler, &mut state);
             self.send_sync(handler, &mut state);
 
-            // Calculate spend time in current loop iteration and limit ticks
-            // accordingly.
-
-            // TODO: In case we spent more time than the tick_delay, make the
-            // next tick faster in order to compensate.
-            thread::sleep(
-                Duration::new(0, tick_delay - cmp::min(
-                    (clock_ticks::precise_time_ns() - begin) as u32,
-                    tick_delay
-                ))
-            );
+            tick::end(tick_delay, tick_start, &mut tick_overflow, &self.config);
 
         }
 
@@ -237,7 +222,7 @@ impl Client {
     ) {
 
         // Receive all incoming UDP packets from the specified remote
-        // address feeding them into out connection object for parsing
+        // address feeding them into our connection object for parsing
         if !self.closed {
             let mut bytes_received = 0;
             while let Ok((addr, packet)) = state.socket.try_recv() {
@@ -294,7 +279,6 @@ impl Client {
 
             handler.close(self);
             state.connection.reset();
-            state.socket.shutdown();
 
             self.peer_address = None;
             self.local_address = None;

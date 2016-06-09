@@ -43,7 +43,43 @@ pub struct Config {
 
     /// The percent of available packet bytes to use when serializing
     /// `MessageKind::Ordered` into a packet via a `MessageQueue`.
-    pub message_quota_ordered: f32
+    pub message_quota_ordered: f32,
+
+    /// Whether to keep track of ticks which exceed their maximum running time
+    /// and speed up successive ticks in order to keep the desired target
+    /// `send_rate` stable.
+    ///
+    /// Each tick has a limit of the number of milliseconds in can take before
+    /// the `send_rate` drops below the specified ticks per second
+    /// target (`1000 / send_rate` milliseconds). Ticks which fall below this
+    /// threshold will normally sleep for the remaining amount of time.
+    ///
+    /// Ticks which exceed this threshold will normally cause the `send_rate`
+    /// to drop below the target; however, with `tick_overflow_recovery`
+    /// enabled any tick which falls below the threshold will give up some of
+    /// its remaining sleep time in order to allow the `send_rate` to catch up
+    /// again.
+    ///
+    /// How much of each tick's sleep time is used for speedup purposes is
+    /// determined by the value of `tick_overflow_recovery`.
+    ///
+    /// Default is `true`.
+    pub tick_overflow_recovery: bool,
+
+    /// Determines how much of each tick's sleep time may be used to reduce the
+    /// current tick overflow time in order to smooth out the `send_rate`.
+    ///
+    /// Values must be in the range of `0.0` to `1.0` where `0.25` would be a
+    /// quarter of the tick's sleep time.
+    ///
+    /// Example: For a `send_rate` of `30` with a maximum sleep time of `33.33`
+    /// milliseconds, a `tick_overflow_recovery_rate` value of `0.5` would
+    /// allow up to `16.66` milliseconds of sleep to be skipped.
+    ///
+    /// Values smaller than `0.0` or bigger than `1.0` will have no effect.
+    ///
+    /// Default is `1.0`.
+    pub tick_overflow_recovery_rate: f32
 
 }
 
@@ -59,7 +95,9 @@ impl Default for Config {
             connection_drop_threshold: 1000,
             message_quota_instant: 60.0,
             message_quota_reliable: 20.0,
-            message_quota_ordered: 20.0
+            message_quota_ordered: 20.0,
+            tick_overflow_recovery: true,
+            tick_overflow_recovery_rate: 1.0
         }
     }
 
