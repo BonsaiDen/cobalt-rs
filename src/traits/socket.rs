@@ -14,7 +14,7 @@ pub trait Socket {
 
     /// Method that attempts to return a incoming packet on this socket without
     /// blocking.
-    fn try_recv(&self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError>;
+    fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError>;
 
     /// Method sending data on the socket to the given address. On success,
     /// returns the number of bytes written.
@@ -25,9 +25,6 @@ pub trait Socket {
 
     /// Method returning the address of the actual, underlying socket.
     fn local_addr(&self) -> Result<net::SocketAddr, Error>;
-
-    /// Method for shutting down the socket.
-    fn shutdown(&mut self);
 
 }
 
