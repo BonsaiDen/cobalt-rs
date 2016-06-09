@@ -20,7 +20,7 @@ use super::super::{Config, Server, Stats};
 fn test_server_tick_delay_no_overflow() {
 
     let mut handler = MockTickDelayServerHandler {
-        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.0)
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 625)
     };
 
     let mut server = Server::new(Config {
@@ -37,7 +37,7 @@ fn test_server_tick_delay_no_overflow() {
 fn test_server_tick_delay_overflow_half() {
 
     let mut handler = MockTickDelayServerHandler {
-        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.5)
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 495)
     };
 
     let mut server = Server::new(Config {
@@ -53,7 +53,7 @@ fn test_server_tick_delay_overflow_half() {
 fn test_server_tick_delay_overflow_one() {
 
     let mut handler = MockTickDelayServerHandler {
-        tick_recorder: MockTickRecorder::new(15, 4, 30, 1.0)
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 495)
     };
 
     let mut server = Server::new(Config {

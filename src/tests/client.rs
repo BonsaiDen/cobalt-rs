@@ -19,7 +19,7 @@ use super::super::{Client, Config, MessageKind, Stats};
 fn test_client_tick_delay_no_overflow() {
 
     let mut handler = MockTickDelayClientHandler {
-        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.0)
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 625)
     };
 
     let mut server = Client::new(Config {
@@ -37,7 +37,7 @@ fn test_client_tick_delay_no_overflow() {
 fn test_client_tick_delay_overflow_half() {
 
     let mut handler = MockTickDelayClientHandler {
-        tick_recorder: MockTickRecorder::new(15, 4, 30, 0.5)
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 495)
     };
 
     let mut server = Client::new(Config {
@@ -54,7 +54,7 @@ fn test_client_tick_delay_overflow_half() {
 fn test_client_tick_delay_overflow_one() {
 
     let mut handler = MockTickDelayClientHandler {
-        tick_recorder: MockTickRecorder::new(15, 4, 30, 1.0)
+        tick_recorder: MockTickRecorder::new(15, 4, 30, 495)
     };
 
     let mut server = Client::new(Config {

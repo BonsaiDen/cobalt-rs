@@ -24,8 +24,9 @@ use super::super::{
     Server, Client
 };
 
+#[macro_export]
 macro_rules! assert_epsilon {
-    ($value:ident, $target:expr, $difference:expr) => {
+    ($value:expr, $target:expr, $difference:expr) => {
         {
             let min = $target - $difference;
             let max = $target + $difference;
@@ -270,23 +271,23 @@ pub struct MockTickRecorder {
     tick_delay: u32,
     tick_count: u32,
     last_tick_time: u32,
-    rate_factor: f32,
+    expected_time: u32,
     last_sleep_duration: u32,
-    overflow: i32
+    accumulated: i32
 }
 
 impl MockTickRecorder {
 
-    pub fn new(max_ticks: u32, load_ticks: u32, send_rate: u32, rate_factor: f32) -> MockTickRecorder {
+    pub fn new(max_ticks: u32, load_ticks: u32, send_rate: u32, expected_time: u32) -> MockTickRecorder {
         MockTickRecorder {
             max_ticks: max_ticks,
             load_ticks: load_ticks,
             tick_delay: 1000 / send_rate,
             tick_count: 0,
             last_tick_time: 0,
-            rate_factor: rate_factor,
+            expected_time: expected_time,
             last_sleep_duration: 0,
-            overflow: 0
+            accumulated: 0
         }
     }
 
@@ -297,31 +298,19 @@ impl MockTickRecorder {
     fn tick(&mut self) -> bool {
 
         if self.tick_count > 1 {
-
             let delay = (precise_time_ms() - self.last_tick_time) as i32 - (self.last_sleep_duration as i32 - self.tick_delay as i32 * 2);
-
-            // Load ticks are expected to take twice as long
-            if self.tick_count <= self.load_ticks + 1 {
-                self.overflow += delay - self.tick_delay as i32;
-                assert_epsilon!(delay, (self.tick_delay * 2) as i32, 10);
-                println!("{}) Taken: {} (load) (Builtup Overflow {})", self.tick_count, delay, self.overflow);
-
-            // Cooldown ticks are expected to take tick_delay - tick_delay * rate_factor
-            } else {
-                let expected_reduction = (self.tick_delay as f32 * self.rate_factor).ceil().max(0.0) as u32;
-                let available_reduction = cmp::min(self.overflow as u32, expected_reduction);
-                let expected = self.tick_delay - available_reduction;
-                assert_epsilon!(delay, expected as i32, 10);
-                self.overflow -= available_reduction as i32;
-                println!("{}) Taken: {} Expected: {} (cooldown) (Remaining Overflow: {}) ", self.tick_count, delay, expected, self.overflow);
-            }
-
+            self.accumulated += delay;
         }
 
         self.last_tick_time = precise_time_ms();
         self.tick_count += 1;
 
         if self.tick_count == self.max_ticks + 2 {
+            assert_epsilon!(
+                self.accumulated,
+                self.expected_time as i32,
+                self.tick_delay as i32
+            );
             true
 
         // Fake load by waiting sleeping twice the normal tick delay
