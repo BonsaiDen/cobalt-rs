@@ -8,14 +8,6 @@
 use super::super::Config;
 use super::super::shared::message_queue::{MessageKind, MessageQueue};
 
-fn messages(q: &mut MessageQueue) -> Vec<Vec<u8>> {
-    let mut messages = Vec::new();
-    for m in q.received() {
-        messages.push(m);
-    }
-    messages
-}
-
 #[test]
 fn test_send_write() {
 
@@ -480,5 +472,14 @@ fn test_out_of_order_duplicates() {
 
     assert_eq!(messages(&mut q), [[53], [57], [54], [59], [58]]);
 
+}
+
+// Helpers --------------------------------------------------------------------
+fn messages(q: &mut MessageQueue) -> Vec<Vec<u8>> {
+    let mut messages = Vec::new();
+    for m in q.received() {
+        messages.push(m);
+    }
+    messages
 }
 
