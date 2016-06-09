@@ -54,13 +54,13 @@ struct Message {
 impl Ord for Message {
     // Explicitly implement the trait so the queue becomes a min-heap
     // instead of a max-heap.
-    fn cmp(&self, other: &Message) -> cmp::Ordering {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
         other.order.cmp(&self.order)
     }
 }
 
 impl PartialOrd for Message {
-    fn partial_cmp(&self, other: &Message) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }

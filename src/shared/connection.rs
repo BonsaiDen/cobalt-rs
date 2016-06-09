@@ -520,7 +520,7 @@ impl Connection {
             let packet = handler.connection_packet_compress(
                 owner, self,
                 packet[..PACKET_HEADER_SIZE].to_vec(),
-                &mut packet[PACKET_HEADER_SIZE..]
+                &packet[PACKET_HEADER_SIZE..]
             );
 
             socket.send_to(
