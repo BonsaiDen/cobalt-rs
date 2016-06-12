@@ -185,15 +185,9 @@ impl Server {
             self.statistics.tick();
 
             // Remove any dropped connections and their address mappings
-            if !dropped.is_empty() {
-
-                for id in &dropped {
-                    connections.remove(id).unwrap().reset();
-                    addresses.remove(id);
-                }
-
-                dropped.clear();
-
+            for id in dropped.drain(..) {
+                connections.remove(&id).unwrap().reset();
+                addresses.remove(&id);
             }
 
             tick::end(tick_delay, tick_start, &mut tick_overflow, &self.config);
