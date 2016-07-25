@@ -6,12 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 extern crate rand;
-extern crate clock_ticks;
 
 use std::cmp;
 use std::net::SocketAddr;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::time::{Duration, Instant};
 use super::message_queue::{MessageQueue, MessageIterator};
 use super::super::traits::socket::Socket;
 use super::super::{Config, MessageKind, Handler, RateLimiter};
@@ -43,7 +43,7 @@ enum PacketState {
 #[derive(Debug)]
 struct SentPacketAck {
     seq: u32,
-    time: u32,
+    time: Instant,
     state: PacketState,
     packet: Option<Vec<u8>>
 }
@@ -124,7 +124,7 @@ pub struct Connection {
     smoothed_rtt: f32,
 
     /// Last time a packet was received
-    last_receive_time: u32,
+    last_receive_time: Instant,
 
     /// Queue of recently received packets used for ack bitfield construction
     recv_ack_queue: VecDeque<u32>,
@@ -187,7 +187,7 @@ impl Connection {
             local_seq_number: 0,
             remote_seq_number: 0,
             smoothed_rtt: 0.0,
-            last_receive_time: precise_time_ms(),
+            last_receive_time: Instant::now(),
             recv_ack_queue: VecDeque::new(),
             sent_ack_queue: Vec::new(),
             sent_packets: 0,
@@ -333,7 +333,7 @@ impl Connection {
         }
 
         // Update time used for disconnect detection
-        self.last_receive_time = precise_time_ms();
+        self.last_receive_time = Instant::now();
 
         // Read remote sequence number
         self.remote_seq_number = packet[8] as u32;
@@ -353,19 +353,24 @@ impl Connection {
             if let Some(lost_packet) = {
 
                 let ack = self.sent_ack_queue.get_mut(i).unwrap();
+                let last_receive_since_ack = if self.last_receive_time > ack.time {
+                    dur_as_ms(self.last_receive_time - ack.time)
+                } else {
+                    0
+                };
 
                 // Calculate the roundtrip time from acknowledged packets
                 if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
                     self.acked_packets = self.acked_packets.wrapping_add(1);
                     self.smoothed_rtt = moving_average(
                         self.smoothed_rtt,
-                        (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay) as f32
+                        (cmp::max(last_receive_since_ack, tick_delay) - tick_delay) as f32
                     );
                     ack.state = PacketState::Acked;
                     None
 
                 // Extract data from lost packets
-                } else if self.last_receive_time - ack.time
+                } else if last_receive_since_ack
                         > self.config.packet_drop_threshold {
 
                     self.lost_packets = self.lost_packets.wrapping_add(1);
@@ -546,7 +551,7 @@ impl Connection {
         if self.send_ack_required(self.local_seq_number) {
             self.sent_ack_queue.push(SentPacketAck {
                 seq: self.local_seq_number,
-                time: precise_time_ms(),
+                time: Instant::now(),
                 state: PacketState::Unknown,
                 packet: Some(packet)
             });
@@ -576,7 +581,7 @@ impl Connection {
         self.local_seq_number = 0;
         self.remote_seq_number = 0;
         self.smoothed_rtt = 0.0;
-        self.last_receive_time = precise_time_ms();
+        self.last_receive_time = Instant::now();
         self.recv_ack_queue.clear();
         self.sent_ack_queue.clear();
         self.sent_packets = 0;
@@ -653,7 +658,7 @@ impl Connection {
     ) -> bool {
 
         // Calculate time since last received packet
-        let inactive_time = precise_time_ms() - self.last_receive_time;
+        let inactive_time = dur_as_ms(self.last_receive_time.elapsed());
 
         match self.state {
 
@@ -743,7 +748,7 @@ fn seq_was_acked(seq: u32, ack: u32, bitfield: u32) -> bool {
     }
 }
 
-fn precise_time_ms() -> u32 {
-    (clock_ticks::precise_time_ns() / 1000000) as u32
+fn dur_as_ms(dur: Duration) -> u32 {
+    (dur.as_secs() as u32 * 1000) + (dur.subsec_nanos() / 1000_000)
 }
 

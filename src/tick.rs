@@ -5,27 +5,27 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
-
 use std::cmp;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::Config;
 
-pub fn start() -> u64 {
-    clock_ticks::precise_time_ns()
+pub fn start() -> Instant {
+    Instant::now()
 }
 
 pub fn end(
     tick_delay: u32,
-    tick_start: u64,
+    tick_start: Instant,
     overflow: &mut u32,
     config: &Config
 ) {
 
     // Actual time taken by the tick
-    let time_taken = (clock_ticks::precise_time_ns() - tick_start) as u32;
+    let elapsed = tick_start.elapsed();
+    assert!(elapsed.as_secs() == 0, "tick exceeded 1 second");
+    let time_taken = elapsed.subsec_nanos();
 
     // Required delay reduction to keep tick rate
     let mut reduction = cmp::min(time_taken, tick_delay);
