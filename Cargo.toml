@@ -10,7 +10,6 @@ keywords = [ "virtual", "udp", "connection", "message", "queue"]
 license="MIT/Apache-2.0"
 
 [dependencies]
-clock_ticks = "0.1.0"
 rand = "0.3.14"
 clippy = { version = "*", optional = true }
 

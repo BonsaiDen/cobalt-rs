@@ -5,13 +5,12 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
 
 use std::cmp;
 use std::net;
 use std::thread;
 use std::io::Error;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::net::ToSocketAddrs;
 use std::collections::HashMap;
 
@@ -270,7 +269,7 @@ pub struct MockTickRecorder {
     load_ticks: u32,
     tick_delay: u32,
     tick_count: u32,
-    last_tick_time: u32,
+    last_tick_time: Instant,
     expected_time: u32,
     last_sleep_duration: u32,
     accumulated: i32
@@ -284,7 +283,7 @@ impl MockTickRecorder {
             load_ticks: load_ticks,
             tick_delay: 1000 / send_rate,
             tick_count: 0,
-            last_tick_time: 0,
+            last_tick_time: Instant::now(),
             expected_time: expected_time,
             last_sleep_duration: 0,
             accumulated: 0
@@ -292,17 +291,19 @@ impl MockTickRecorder {
     }
 
     fn init(&mut self) {
-        self.last_tick_time = precise_time_ms();
+        self.last_tick_time = Instant::now();
     }
 
     fn tick(&mut self) -> bool {
 
         if self.tick_count > 1 {
-            let delay = (precise_time_ms() - self.last_tick_time) as i32 - (self.last_sleep_duration as i32 - self.tick_delay as i32 * 2);
+            let elapsed = self.last_tick_time.elapsed();
+            let delay = elapsed.as_secs() as i32 * 1000 + elapsed.subsec_nanos() as i32 / 1000_000 -
+                (self.last_sleep_duration as i32 - self.tick_delay as i32 * 2);
             self.accumulated += delay;
         }
 
-        self.last_tick_time = precise_time_ms();
+        self.last_tick_time = Instant::now();
         self.tick_count += 1;
 
         if self.tick_count == self.max_ticks + 2 {
@@ -315,9 +316,10 @@ impl MockTickRecorder {
 
         // Fake load by waiting sleeping twice the normal tick delay
         } else if self.tick_count > 1 && self.tick_count <= self.load_ticks + 1 {
-            let before = precise_time_ms();
+            let before = Instant::now();
             thread::sleep(Duration::from_millis((self.tick_delay * 2) as u64));
-            self.last_sleep_duration = precise_time_ms() - before;
+            let elapsed = before.elapsed();
+            self.last_sleep_duration = elapsed.as_secs() as u32 * 1000 + elapsed.subsec_nanos() / 1000_000;
             false
 
         } else {
@@ -564,10 +566,6 @@ fn check_server_messages(conn: &mut Connection) {
 
 fn to_socket_addr<T: ToSocketAddrs>(address: T) -> net::SocketAddr {
     address.to_socket_addrs().unwrap().nth(0).unwrap()
-}
-
-fn precise_time_ms() -> u32 {
-    (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 
 pub fn create_connection(config: Option<Config>) -> (Connection, MockOwner, MockOwnerHandler) {
