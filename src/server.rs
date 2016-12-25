@@ -168,7 +168,7 @@ impl Server {
 
                 // Resolve the last known remote address for this
                 // connection and send the data
-                let addr = addresses.get(id).unwrap();
+                let addr = &addresses[id];
 
                 // Then invoke the connection to send a outgoing packet
                 bytes_sent += conn.send_packet(&mut socket, addr, self, handler);

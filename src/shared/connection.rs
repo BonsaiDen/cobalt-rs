@@ -352,7 +352,7 @@ impl Connection {
 
             if let Some(lost_packet) = {
 
-                let ack = self.sent_ack_queue.get_mut(i).unwrap();
+                let ack = &mut self.sent_ack_queue[i];
 
                 // Calculate the roundtrip time from acknowledged packets
                 if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
