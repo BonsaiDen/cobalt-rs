@@ -607,6 +607,9 @@ fn test_rtt_tick_correction() {
 #[test]
 fn test_packet_loss() {
 
+    use super::super::{Handler, Connection};
+    use super::mock::MockOwner;
+
     struct PacketLossHandler {
         packet_lost_calls: u32,
         connection_calls: u32
@@ -740,6 +743,9 @@ fn test_packet_loss() {
 #[test]
 fn test_packet_compression() {
 
+    use super::super::{Handler, Connection};
+    use super::mock::MockOwner;
+
     struct PacketCompressionHandler {
         packet_compress_calls: u32,
         packet_decompress_calls: u32
@@ -861,6 +867,10 @@ fn test_packet_compression() {
 #[cfg(feature = "packet_handler_compress")]
 #[test]
 fn test_packet_compression_inflated() {
+
+    use std::iter;
+    use super::super::{Handler, Connection};
+    use super::mock::MockOwner;
 
     struct PacketCompressionHandler {
         packet_compress_calls: u32
