@@ -238,6 +238,7 @@
 mod client;
 mod client_stream;
 mod server;
+mod server_stream;
 mod tick;
 
 mod shared {
@@ -301,6 +302,15 @@ pub use client_stream::ClientEvent;
 
 #[doc(inline)]
 pub use server::Server;
+
+#[doc(inline)]
+pub use server::ServerState;
+
+#[doc(inline)]
+pub use server_stream::ServerStream;
+
+#[doc(inline)]
+pub use server_stream::ServerEvent;
 
 #[cfg(test)]
 mod tests {

@@ -16,7 +16,7 @@ use super::{
 };
 
 
-/// Enum of stream related network events.
+/// Enum of client network events.
 #[derive(Debug, PartialEq)]
 pub enum ClientEvent {
 
@@ -176,7 +176,7 @@ impl ClientStream {
 
     }
 
-    /// Receives the next incoming message from the stream's underlying
+    /// Receives and returns incoming messages from the stream's underlying
     /// connection.
     pub fn receive(&mut self) -> Result<ClientEvent, TryRecvError> {
 

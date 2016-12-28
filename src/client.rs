@@ -117,11 +117,12 @@ impl Client {
             self.connect_from_socket_sync(handler, addr, socket)
         );
 
+        let tick_delay = 1000000000 / self.config.send_rate;
+
         let mut tick_overflow = 0;
         while self.running {
 
             let tick_start = tick::start();
-            let tick_delay = 1000000000 / self.config.send_rate;
 
             self.receive_sync(handler, &mut state, tick_delay / 1000000);
             self.tick_sync(handler, &mut state);
@@ -238,7 +239,7 @@ impl Client {
 
     }
 
-    /// Performs exactly on tick of the underlying connection.
+    /// Performs exactly one tick on the underlying connection.
     pub fn tick_sync<S: Socket>(
         &mut self, handler: &mut Handler<Client>, state: &mut ClientState<S>
     ) {
@@ -247,7 +248,7 @@ impl Client {
         }
     }
 
-    /// Sends exactly on outgoing packet from the underlying connection.
+    /// Sends exactly one outgoing packet from the underlying connection.
     pub fn send_sync<S: Socket>(
         &mut self, handler: &mut Handler<Client>, state: &mut ClientState<S>
     ) {
@@ -305,7 +306,7 @@ pub struct ClientState<S: Socket> {
     stats: Stats
 }
 
-impl <S: Socket>ClientState<S> {
+impl<S: Socket> ClientState<S> {
 
     // We need to encapsulate the above objects because they cannot be
     // owned by the client itself without running into issues with multiple
