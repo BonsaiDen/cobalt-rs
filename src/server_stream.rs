@@ -184,12 +184,15 @@ impl ServerStream {
         }
     }
 
-    /// Sends all queued messages for the stream's underlying client connections.
-    pub fn flush(&mut self) -> Result<(), Error> {
+    /// Sends all queued messages to the stream's underlying client connections.
+    pub fn flush(&mut self, delay: bool) -> Result<(), Error> {
         if let Some(mut state) = self.state.as_mut() {
             self.should_receive = true;
             Ok(self.server.send_sync(
-                &mut self.handler, &mut state, 1000000000 / self.tick_rate
+                &mut self.handler,
+                &mut state,
+                1000000000 / self.tick_rate,
+                delay
             ))
 
         } else {

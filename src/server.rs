@@ -100,7 +100,7 @@ impl Server {
         while !self.closed {
             self.accept_receive_sync(handler, &mut state, tick_delay);
             self.tick_sync(handler, &mut state);
-            self.send_sync(handler, &mut state, tick_delay);
+            self.send_sync(handler, &mut state, tick_delay, true);
         }
 
         self.shutdown_sync(handler, &mut state);
@@ -256,7 +256,8 @@ impl Server {
         &mut self,
         handler: &mut Handler<Server>,
         state: &mut ServerState<S>,
-        tick_delay: u32
+        tick_delay: u32,
+        delay: bool
     ) {
 
         // List of dropped connections
@@ -290,7 +291,9 @@ impl Server {
             state.addresses.remove(&id);
         }
 
-        tick::end(tick_delay, state.tick_start, &mut state.tick_overflow, &self.config);
+        if delay {
+            tick::end(tick_delay, state.tick_start, &mut state.tick_overflow, &self.config);
+        }
 
     }
 
