@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license

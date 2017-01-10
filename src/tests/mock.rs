@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -19,9 +19,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 
 use super::super::{
-    BinaryRateLimiter, Config, Connection, ConnectionID,
-    Handler, MessageKind, Socket,
-    Server, Client
+    BinaryRateLimiter, Config, Connection, ConnectionID, ConnectionEvent,
+    MessageKind, Socket, RateLimiter
 };
 
 #[macro_export]
@@ -36,11 +35,6 @@ macro_rules! assert_epsilon {
         }
     }
 }
-
-// Owner Mocks ----------------------------------------------------------------
-pub struct MockOwner;
-pub struct MockOwnerHandler;
-impl Handler<MockOwner> for MockOwnerHandler {}
 
 
 // Mock Packet Data Abstraction -----------------------------------------------
@@ -73,7 +67,7 @@ pub struct MockSocket {
 
 impl MockSocket {
 
-    pub fn new<T: ToSocketAddrs>(
+    pub fn create<T: ToSocketAddrs>(
         address: T,
         incoming: Receiver<MockPacket>,
         outgoing: Sender<MockPacket>,
@@ -88,12 +82,6 @@ impl MockSocket {
             sent_packets: Arc::new(Mutex::new(Vec::new())),
             received_packets: Arc::new(Mutex::new(Vec::new()))
         }
-    }
-
-    pub fn from_address<T: ToSocketAddrs>(addr: T) -> MockSocket {
-        let (incoming_sender, incoming) = channel::<MockPacket>();
-        let (outgoing, _) = channel::<MockPacket>();
-        MockSocket::new(addr, incoming, outgoing, Some(incoming_sender))
     }
 
     //pub fn from_address_pair<T: ToSocketAddrs>(client_addr: T, server_addr: T) -> (MockSocket, MockSocket) {
@@ -125,6 +113,12 @@ impl MockSocket {
 }
 
 impl Socket for MockSocket {
+
+    fn new<T: ToSocketAddrs>(addr: T, _: usize) -> Result<MockSocket, Error> {
+        let (incoming_sender, incoming) = channel::<MockPacket>();
+        let (outgoing, _) = channel::<MockPacket>();
+        Ok(MockSocket::create(addr, incoming, outgoing, Some(incoming_sender)))
+    }
 
     fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
         match self.incoming.try_recv() {
@@ -264,295 +258,14 @@ impl MockSocketHandle {
 }
 
 
-// Client Mocks ---------------------------------------------------------------
-pub struct MockTickRecorder {
-    max_ticks: u32,
-    load_ticks: u32,
-    tick_delay: u32,
-    tick_count: u32,
-    last_tick_time: u32,
-    expected_time: u32,
-    last_sleep_duration: u32,
-    accumulated: i32
-}
-
-impl MockTickRecorder {
-
-    pub fn new(max_ticks: u32, load_ticks: u32, send_rate: u32, expected_time: u32) -> MockTickRecorder {
-        MockTickRecorder {
-            max_ticks: max_ticks,
-            load_ticks: load_ticks,
-            tick_delay: 1000 / send_rate,
-            tick_count: 0,
-            last_tick_time: 0,
-            expected_time: expected_time,
-            last_sleep_duration: 0,
-            accumulated: 0
-        }
-    }
-
-    fn init(&mut self) {
-        self.last_tick_time = precise_time_ms();
-    }
-
-    fn tick(&mut self) -> bool {
-
-        if self.tick_count > 1 {
-            let delay = (precise_time_ms() - self.last_tick_time) as i32 - (self.last_sleep_duration as i32 - self.tick_delay as i32 * 2);
-            self.accumulated += delay;
-        }
-
-        self.last_tick_time = precise_time_ms();
-        self.tick_count += 1;
-
-        if self.tick_count == self.max_ticks + 2 {
-            assert_epsilon!(
-                self.accumulated,
-                self.expected_time as i32,
-                self.tick_delay as i32
-            );
-            true
-
-        // Fake load by waiting sleeping twice the normal tick delay
-        } else if self.tick_count > 1 && self.tick_count <= self.load_ticks + 1 {
-            let before = precise_time_ms();
-            thread::sleep(Duration::from_millis((self.tick_delay * 2) as u64));
-            self.last_sleep_duration = precise_time_ms() - before;
-            false
-
-        } else {
-            false
-        }
-
-    }
-
-}
-
-
-pub struct MockTickDelayClientHandler {
-    pub tick_recorder: MockTickRecorder
-}
-
-impl Handler<Client> for MockTickDelayClientHandler {
-
-    fn connect(&mut self, _: &mut Client) {
-        self.tick_recorder.init();
-    }
-
-    fn tick_connection(&mut self, client: &mut Client, _: &mut Connection) {
-        if self.tick_recorder.tick() {
-            client.close().unwrap();
-        }
-    }
-
-}
-
-pub struct MockSyncClientHandler {
-    pub connect_count: u32,
-    pub tick_count: u32,
-    pub close_count: u32
-}
-
-impl Handler<Client> for MockSyncClientHandler {
-
-    fn connect(&mut self, _: &mut Client) {
-        self.connect_count += 1;
-    }
-
-    fn tick_connection(&mut self, _: &mut Client, _: &mut Connection) {
-        self.tick_count += 1;
-    }
-
-    fn close(&mut self, _: &mut Client) {
-        self.close_count += 1;
-    }
-
-}
-
-pub struct MockClientStatsHandler {
-    pub tick_count: u32,
-}
-
-impl Handler<Client> for MockClientStatsHandler {
-
-    fn connect(&mut self, _: &mut Client) {
-    }
-
-    fn tick_connection(
-        &mut self, client: &mut Client,
-        conn: &mut Connection
-    ) {
-
-        conn.send(MessageKind::Instant, b"Hello World".to_vec());
-        self.tick_count += 1;
-
-        if self.tick_count == 20 {
-            client.close().unwrap();
-        }
-
-    }
-
-}
-
-// Server Mocks ---------------------------------------------------------------
-pub struct MockTickDelayServerHandler {
-    pub tick_recorder: MockTickRecorder
-}
-
-impl Handler<Server> for MockTickDelayServerHandler {
-
-    fn bind(&mut self, _: &mut Server) {
-        self.tick_recorder.init();
-    }
-
-    fn tick_connections(
-        &mut self, server: &mut Server,
-        _: &mut HashMap<ConnectionID, Connection>
-    ) {
-        if self.tick_recorder.tick() {
-            server.shutdown().unwrap();
-        }
-    }
-
-}
-
-pub struct MockConnectionServerHandler {
-    pub connection_count: i32
-}
-
-impl Handler<Server> for MockConnectionServerHandler {
-
-    fn connection(&mut self, _: &mut Server, _: &mut Connection) {
-        self.connection_count += 1;
-    }
-
-    fn tick_connections(
-        &mut self, server: &mut Server,
-        connections: &mut HashMap<ConnectionID, Connection>
-    ) {
-
-        // expect 1 message from each connection
-        for (id, conn) in connections.iter_mut() {
-            match *id {
-                ConnectionID(1...2) => check_server_messages(conn),
-                _ => unreachable!("Invalid connection ID")
-            }
-        }
-
-        server.shutdown().unwrap();
-
-    }
-
-}
-
-pub struct MockConnectionRemapServerHandler {
-    pub connection_count: i32
-}
-
-impl Handler<Server> for MockConnectionRemapServerHandler {
-
-    fn connection(&mut self, _: &mut Server, conn: &mut Connection) {
-        let ip = net::Ipv4Addr::new(127, 0, 0, 1);
-        let addr = net::SocketAddr::V4(net::SocketAddrV4::new(ip, 1234));
-        assert_eq!(conn.peer_addr(), addr);
-        self.connection_count += 1;
-    }
-
-    fn tick_connections(
-        &mut self, server: &mut Server,
-        connections: &mut HashMap<ConnectionID, Connection>
-    ) {
-
-        // expect 1 message from the connection
-        for (id, conn) in connections.iter_mut() {
-            let ip = net::Ipv4Addr::new(127, 0, 0, 1);
-            let addr = net::SocketAddr::V4(net::SocketAddrV4::new(ip, 5678));
-            assert_eq!(*id, ConnectionID(1));
-            assert_eq!(conn.peer_addr(), addr);
-            check_server_messages(conn);
-        }
-
-        server.shutdown().unwrap();
-
-    }
-
-}
-
-pub struct MockServerStatsHandler {
-    pub tick_count: u32,
-}
-
-impl Handler<Server> for MockServerStatsHandler {
-
-    fn connect(&mut self, _: &mut Server) {
-    }
-
-    fn tick_connections(
-        &mut self, server: &mut Server,
-        _: &mut HashMap<ConnectionID, Connection>
-    ) {
-
-        //conn.send(MessageKind::Instant, b"Hello World".to_vec());
-        self.tick_count += 1;
-
-        if self.tick_count == 20 {
-            server.shutdown().unwrap();
-        }
-
-    }
-
-}
-
-pub struct MockServerHandler {
-    send_count: u8,
-    pub received: Vec<Vec<u8>>
-}
-
-impl MockServerHandler {
-    pub fn new() -> MockServerHandler {
-        MockServerHandler {
-            send_count: 0,
-            received: Vec::new()
-        }
-    }
-}
-
-impl Handler<Server> for MockServerHandler {
-
-    fn tick_connections(
-        &mut self, server: &mut Server,
-        connections: &mut HashMap<ConnectionID, Connection>
-    ) {
-
-        // Ensure hashmap and connection object have the same id
-        for (_, conn) in connections.iter_mut() {
-
-            if self.send_count < 3 {
-                conn.send(MessageKind::Instant, [self.send_count].to_vec());
-                self.send_count += 1;
-            }
-
-            for msg in conn.received() {
-                self.received.push(msg);
-            }
-
-        }
-
-        if !self.received.is_empty() && self.send_count == 3 {
-            server.shutdown().unwrap();
-        }
-
-    }
-
-}
-
-
 // Helpers --------------------------------------------------------------------
-fn check_server_messages(conn: &mut Connection) {
+fn check_server_messages(conn: &mut Connection<BinaryRateLimiter>) {
 
     let mut messages = Vec::new();
-    for m in conn.received() {
-        messages.push(m);
+    for m in conn.events() {
+        if let ConnectionEvent::Message(m) = m {
+            messages.push(m);
+        }
     }
 
     assert_eq!(messages, [
@@ -570,25 +283,21 @@ fn precise_time_ms() -> u32 {
     (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 
-pub fn create_connection(config: Option<Config>) -> (Connection, MockOwner, MockOwnerHandler) {
+pub fn create_connection(config: Option<Config>) -> Connection<BinaryRateLimiter> {
     let config = config.unwrap_or_else(||Config::default());
     let local_address: net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
     let peer_address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
-    let limiter = BinaryRateLimiter::new(&config);
-    (
-        Connection::new(config, local_address, peer_address, limiter),
-        MockOwner,
-        MockOwnerHandler
-    )
+    let limiter = BinaryRateLimiter::new(config);
+    Connection::new(config, local_address, peer_address, limiter)
 
 }
 
 pub fn create_socket(config: Option<Config>) -> (
-    Connection, MockSocket, MockSocketHandle, MockOwner, MockOwnerHandler
+    Connection<BinaryRateLimiter>, MockSocket, MockSocketHandle
 ) {
-    let (conn, owner, handler) = create_connection(config);
-    let socket = MockSocket::from_address(conn.local_addr());
+    let conn = create_connection(config);
+    let socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let socket_handle = socket.handle();
-    (conn, socket, socket_handle, owner, handler)
+    (conn, socket, socket_handle)
 }
 

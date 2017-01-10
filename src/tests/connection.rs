@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -10,11 +10,11 @@ use std::thread;
 use std::time::Duration;
 
 use super::mock::{create_connection, create_socket};
-use super::super::{ConnectionState, Config, MessageKind};
+use super::super::{ConnectionState, ConnectionEvent, Config, MessageKind};
 
 #[test]
 fn test_create() {
-    let (conn, _, _) = create_connection(None);
+    let conn = create_connection(None);
     assert_eq!(conn.open(), true);
     assert_eq!(conn.congested(), false);
     assert!(conn.state() == ConnectionState::Connecting);
@@ -28,7 +28,7 @@ fn test_create() {
 
 #[test]
 fn test_set_tick_rate() {
-    let (mut conn, _, _) = create_connection(None);
+    let mut conn = create_connection(None);
     conn.set_config(Config {
         send_rate: 10,
         .. Config::default()
@@ -38,7 +38,7 @@ fn test_set_tick_rate() {
 #[test]
 fn test_close_local() {
 
-    let (mut conn, mut socket, mut socket_handle, mut owner, mut handler) = create_socket(None);
+    let (mut conn, mut socket, mut socket_handle) = create_socket(None);
     let address = conn.peer_addr();
 
     // Initiate closure
@@ -47,7 +47,7 @@ fn test_close_local() {
     assert!(conn.state() == ConnectionState::Closing);
 
     // Connection should now be sending closing packets
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![("255.1.1.2:5678", [
         // protocol id
         1, 2, 3, 4,
@@ -64,7 +64,7 @@ fn test_close_local() {
 
     // Connection should close once the drop threshold is exceeded
     thread::sleep(Duration::from_millis(90));
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent_none();
 
     assert_eq!(conn.open(), false);
@@ -75,7 +75,7 @@ fn test_close_local() {
 #[test]
 fn test_close_remote() {
 
-    let (mut conn, mut owner, mut handler) = create_connection(None);
+    let mut conn = create_connection(None);
     assert!(conn.state() == ConnectionState::Connecting);
 
     // Receive initial packet
@@ -86,7 +86,7 @@ fn test_close_remote() {
         0, // remote sequence number we confirm
         0, 0, 0, 0 // bitfield
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     assert!(conn.state() == ConnectionState::Connected);
 
@@ -96,7 +96,7 @@ fn test_close_remote() {
         0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
         0, 128, 85, 85, 85, 85 // closure packet data
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     assert_eq!(conn.open(), false);
     assert!(conn.state() == ConnectionState::Closed);
@@ -105,7 +105,7 @@ fn test_close_remote() {
 
 #[test]
 fn test_reset() {
-    let (mut conn, _, _) = create_connection(None);
+    let mut conn = create_connection(None);
     conn.close();
     conn.reset();
     assert_eq!(conn.open(), true);
@@ -115,12 +115,12 @@ fn test_reset() {
 #[test]
 fn test_send_sequence_wrap_around() {
 
-    let (mut conn, mut socket, mut socket_handle, mut owner, mut handler) = create_socket(None);
+    let (mut conn, mut socket, mut socket_handle) = create_socket(None);
     let address = conn.peer_addr();
 
     for i in 0..256 {
 
-        conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+        conn.send_packet(&mut socket, &address);
 
         socket_handle.assert_sent(vec![("255.1.1.2:5678", [
             // protocol id
@@ -141,7 +141,7 @@ fn test_send_sequence_wrap_around() {
     }
 
     // Should now wrap around
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![("255.1.1.2:5678", [
         // protocol id
         1, 2, 3, 4,
@@ -163,11 +163,11 @@ fn test_send_sequence_wrap_around() {
 #[test]
 fn test_send_and_receive_packet() {
 
-    let (mut conn, mut socket, mut socket_handle, mut owner, mut handler) = create_socket(None);
+    let (mut conn, mut socket, mut socket_handle) = create_socket(None);
     let address = conn.peer_addr();
 
     // Test Initial Packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![("255.1.1.2:5678", [
         // protocol id
         1, 2, 3, 4,
@@ -185,7 +185,7 @@ fn test_send_and_receive_packet() {
     ].to_vec())]);
 
     // Test sending of written data
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![("255.1.1.2:5678", [
         1, 2, 3, 4,
         (conn.id().0 >> 24) as u8,
@@ -199,7 +199,7 @@ fn test_send_and_receive_packet() {
     ].to_vec())]);
 
     // Write buffer should get cleared
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![("255.1.1.2:5678", [
         1, 2, 3, 4,
         (conn.id().0 >> 24) as u8,
@@ -221,7 +221,7 @@ fn test_send_and_receive_packet() {
         2, // remote sequence number we confirm
         0, 0, 0, 3, // confirm the first two packets
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Receive additional packet
     conn.receive_packet([
@@ -231,7 +231,7 @@ fn test_send_and_receive_packet() {
         3, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     conn.receive_packet([
         1, 2, 3, 4,
@@ -240,7 +240,7 @@ fn test_send_and_receive_packet() {
         4, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     conn.receive_packet([
         1, 2, 3, 4,
@@ -249,10 +249,10 @@ fn test_send_and_receive_packet() {
         4, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Test Receive Ack Bitfield
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![("255.1.1.2:5678", [
         1, 2, 3, 4,
         (conn.id().0 >> 24) as u8,
@@ -273,7 +273,7 @@ fn test_send_and_receive_packet() {
 #[test]
 fn test_send_and_receive_messages() {
 
-    let (mut conn, mut socket, mut socket_handle, mut owner, mut handler) = create_socket(None);
+    let (mut conn, mut socket, mut socket_handle) = create_socket(None);
     let address = conn.peer_addr();
 
     // Test Message Sending
@@ -283,7 +283,7 @@ fn test_send_and_receive_messages() {
     conn.send(MessageKind::Ordered, b"Hello".to_vec());
     conn.send(MessageKind::Ordered, b"World".to_vec());
 
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -338,17 +338,18 @@ fn test_send_and_receive_messages() {
         // Hello
         2, 0, 0, 5, 72, 101, 108, 108, 111
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Get received messages
-    let messages: Vec<Vec<u8>> = conn.received().collect();
+    let messages: Vec<ConnectionEvent> = conn.events().collect();
 
     assert_eq!(messages, vec![
-        b"Foo".to_vec(),
-        b"Bar".to_vec(),
-        b"Test".to_vec(),
-        b"Hello".to_vec(),
-        b"World".to_vec()
+        ConnectionEvent::Connected,
+        ConnectionEvent::Message(b"Foo".to_vec()),
+        ConnectionEvent::Message(b"Bar".to_vec()),
+        ConnectionEvent::Message(b"Test".to_vec()),
+        ConnectionEvent::Message(b"Hello".to_vec()),
+        ConnectionEvent::Message(b"World".to_vec())
     ]);
 
     // Test Received dismissing
@@ -362,10 +363,10 @@ fn test_send_and_receive_messages() {
         // Foo
         0, 0, 0, 3, 70, 111, 111
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // send_packet should dismiss any received messages which have not been fetched
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -380,7 +381,8 @@ fn test_send_and_receive_messages() {
         ].to_vec())
     ]);
 
-    let messages: Vec<Vec<u8>> = conn.received().collect();
+    let messages: Vec<ConnectionEvent> = conn.events().collect();
+    println!("{:?}", messages);
     assert_eq!(messages.len(), 0);
 
 }
@@ -388,29 +390,29 @@ fn test_send_and_receive_messages() {
 #[test]
 fn test_receive_invalid_packets() {
 
-    let (mut conn, mut owner, mut handler) = create_connection(None);
+    let mut conn = create_connection(None);
 
     // Empty packet
-    conn.receive_packet([].to_vec(), 0, &mut owner, &mut handler);
+    conn.receive_packet([].to_vec(), 0);
 
     // Garbage packet
     conn.receive_packet([
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
 }
 
 #[test]
 fn test_rtt() {
 
-    let (mut conn, mut socket, mut socket_handle, mut owner, mut handler) = create_socket(None);
+    let (mut conn, mut socket, mut socket_handle) = create_socket(None);
     let address = conn.peer_addr();
 
     assert_eq!(conn.rtt(), 0);
 
     // First packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -433,13 +435,13 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Expect RTT value to have moved by 10% of the overall roundtrip time
     assert!(conn.rtt() >= 40);
 
     // Second packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -460,10 +462,10 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Third packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -484,10 +486,10 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Fourth packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -508,10 +510,10 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Fifth packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -532,10 +534,10 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Sixth packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -557,7 +559,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Expect RTT to have reduced by 10%
     assert!(conn.rtt() <= 40);
@@ -567,13 +569,13 @@ fn test_rtt() {
 #[test]
 fn test_rtt_tick_correction() {
 
-    let (mut conn, mut socket, mut socket_handle, mut owner, mut handler) = create_socket(None);
+    let (mut conn, mut socket, mut socket_handle) = create_socket(None);
     let address = conn.peer_addr();
 
     assert_eq!(conn.rtt(), 0);
 
     // First packet
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket_handle.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -596,7 +598,7 @@ fn test_rtt_tick_correction() {
         0, 0,
         0, 0
 
-    ].to_vec(), 500, &mut owner, &mut handler);
+    ].to_vec(), 500);
 
     // Expect RTT value to have been corrected by passed in tick delay
     assert!(conn.rtt() <= 10);

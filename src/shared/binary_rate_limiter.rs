@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -38,14 +38,13 @@ pub struct BinaryRateLimiter {
     delay_until_good_mode: u32
 }
 
-impl BinaryRateLimiter {
+impl RateLimiter for BinaryRateLimiter {
 
-    /// Creates a new rate limiter.
-    pub fn new(config: &Config) -> Box<BinaryRateLimiter> {
+    fn new(config: Config) -> BinaryRateLimiter {
 
         let rate = config.send_rate as f32;
 
-        Box::new(BinaryRateLimiter {
+        BinaryRateLimiter {
             tick: 0,
             // Calculate about a third of normal send rate
             max_tick: (rate / (33.0 / (100.0 / rate))) as u32,
@@ -55,13 +54,9 @@ impl BinaryRateLimiter {
             last_good_time: precise_time_ms(),
             good_time_duration: 0,
             delay_until_good_mode: MIN_GOOD_MODE_TIME_DELAY
-        })
+        }
 
     }
-
-}
-
-impl RateLimiter for BinaryRateLimiter {
 
     fn update(&mut self, rtt: u32, _: f32) {
 

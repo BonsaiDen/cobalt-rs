@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -18,10 +18,10 @@ pub struct UdpSocket {
     buffer: Vec<u8>
 }
 
-impl UdpSocket {
+impl Socket for UdpSocket {
 
     /// Tries to create a new UDP socket by binding to the specified address.
-    pub fn new<T: net::ToSocketAddrs>(
+    fn new<T: net::ToSocketAddrs>(
         address: T, max_packet_size: usize
 
     ) -> Result<Self, Error> {
@@ -41,10 +41,6 @@ impl UdpSocket {
         })
 
     }
-
-}
-
-impl Socket for UdpSocket {
 
     /// Attempts to return a incoming packet on this socket without blocking.
     fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {

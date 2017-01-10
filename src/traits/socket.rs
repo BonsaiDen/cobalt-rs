@@ -12,6 +12,9 @@ use std::sync::mpsc::TryRecvError;
 /// Trait for implementation of a non-blocking UDP socket.
 pub trait Socket {
 
+    /// Method that tries to bind a new socket at the specified address.
+    fn new<T: net::ToSocketAddrs>(T, usize) -> Result<Self, Error> where Self: Sized;
+
     /// Method that attempts to return a incoming packet on this socket without
     /// blocking.
     fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError>;

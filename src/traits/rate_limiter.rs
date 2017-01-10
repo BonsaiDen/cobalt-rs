@@ -6,9 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use std::fmt;
+use super::super::Config;
+
 
 /// Trait for implementation of a network congestion avoidance algorithm.
 pub trait RateLimiter {
+
+    /// Method that returns a new rate limiter using the specified configuration.
+    fn new(Config) -> Self where Self: Sized;
 
     /// Method implementing a congestion avoidance algorithm based on round
     /// trip time and packet loss.

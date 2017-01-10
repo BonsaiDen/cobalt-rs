@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -8,43 +8,93 @@
 
 use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, ToSocketAddrs};
-use traits::socket::Socket;
-use shared::stats::{StatsCollector, Stats};
-use shared::udp_socket::UdpSocket;
-use super::{Config, ClientStream, Connection, Handler, MessageKind, tick};
+use std::sync::mpsc::TryRecvError;
+use std::collections::VecDeque;
 
-/// Implementation of a single-server client with handler based event dispatch.
-///
-/// There are two ways of creating and connection a client instance:
-///
-/// 1. Blocking mode to be used in it dedicated thread, with asynchronous
-/// `Handler` callbacks, available via the methods **without** the `sync`
-/// postfix.
-///
-/// 2. Non-Blocking mode, with synchronous `Handler` callbacks, available via
-/// the methods **with** the `sync` postfix.
-#[derive(Debug)]
-pub struct Client {
-    closed: bool,
-    running: bool,
-    config: Config,
-    peer_address: Option<SocketAddr>,
-    local_address: Option<SocketAddr>,
-    statistics: StatsCollector
+use traits::socket::Socket;
+use shared::stats::{Stats, StatsCollector};
+use super::{
+    Config,
+    Connection, ConnectionEvent,
+    MessageKind,
+    RateLimiter, tick
+};
+
+
+/// Enum of client related network events.
+#[derive(Debug, PartialEq)]
+pub enum ClientEvent {
+
+    /// Emitted once a connection to a server has been established.
+    Connection,
+
+    /// Emitted when a initial connection attempt to a server failed.
+    ConnectionFailed,
+
+    /// Emitted when a existing connection to a server is lost.
+    ConnectionLost,
+
+    /// Emitted when a connection is closed programmatically.
+    ConnectionClosed(bool),
+
+    /// Emitted for each message received from a server.
+    Message(Vec<u8>),
+
+    /// Emitted for each packet which was not confirmed by a server
+    /// within the specified limits.
+    PacketLost(Vec<u8>),
+
+    /// Emitted each time the connection's congestion state changes.
+    ConnectionCongestionStateChanged(bool)
+
 }
 
-impl Client {
+/// Implementation UDP socket client.
+#[derive(Debug)]
+pub struct Client<S: Socket, R: RateLimiter> {
+    config: Config,
+    socket: Option<S>,
+    connection: Option<Connection<R>>,
+    tick_start: u64,
+    tick_overflow: u32,
+    peer_address: Option<SocketAddr>,
+    local_address: Option<SocketAddr>,
+    events: VecDeque<ClientEvent>,
+    should_receive: bool,
+    stats_collector: StatsCollector,
+    stats: Stats
+}
+
+impl<S: Socket, R: RateLimiter> Client<S, R> {
 
     /// Creates a new client with the given configuration.
-    pub fn new(config: Config) -> Client {
+    pub fn new(config: Config) -> Client<S, R> {
         Client {
-            closed: false,
-            running: false,
             config: config,
+            socket: None,
+            connection: None,
+            tick_start: 0,
+            tick_overflow: 0,
             peer_address: None,
             local_address: None,
-            statistics: StatsCollector::new(config)
+            events: VecDeque::new(),
+            should_receive: false,
+            stats_collector: StatsCollector::new(config),
+            stats: Stats {
+                bytes_sent: 0,
+                bytes_received: 0
+            }
         }
+    }
+
+    /// Returns the number of bytes sent over the last second.
+    pub fn bytes_sent(&self) -> u32 {
+        self.stats.bytes_sent
+    }
+
+    /// Returns the number of bytes received over the last second.
+    pub fn bytes_received(&self) -> u32 {
+        self.stats.bytes_received
     }
 
     /// Returns the address of the server the client is currently connected to.
@@ -57,92 +107,130 @@ impl Client {
         self.local_address.ok_or_else(|| Error::new(ErrorKind::AddrNotAvailable, ""))
     }
 
-    /// Returns statistics (i.e. bandwidth usage) for the last second.
-    pub fn stats(&mut self) -> Stats {
-        self.statistics.average()
+    /// Returns a mutable reference to underlying connection to the server.
+    pub fn connection(&mut self) -> Result<&mut Connection<R>, Error> {
+        if let Some(connection) = self.connection.as_mut() {
+            Ok(connection)
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
     }
 
-    /// Returns a copy of the client's current configuration.
+    /// Returns the client's current configuration.
     pub fn config(&self) -> Config {
         self.config
     }
 
-    /// Overrides the client's existing configuration.
-    pub fn set_config<S: Socket>(&mut self, config: Config, state: &mut ClientState<S>) {
+    /// Overrides the client's current configuration.
+    pub fn set_config(&mut self, config: Config) {
+
         self.config = config;
-        self.statistics.set_config(config);
-        state.set_config(config);
-    }
+        self.stats_collector.set_config(config);
 
-    // Asynchronous, blocking API ---------------------------------------------
-
-    /// Establishes a connection with the server at the specified address by
-    /// creating a local socket for message sending.
-    ///
-    /// The server must use a compatible connection / packet configuration.
-    ///
-    /// The `handler` is a struct that implements the `Handler` trait in order
-    /// to handle events from the client and its connection.
-    ///
-    /// This method starts the tick loop, blocking the calling thread.
-    pub fn connect<A: ToSocketAddrs>(
-        &mut self, handler: &mut Handler<Client>, addr: A
-
-    ) -> Result<(), Error> {
-
-        let socket = try!(UdpSocket::new(
-            "0.0.0.0:0",
-            self.config.packet_max_size
-        ));
-
-        self.connect_from_socket(handler, addr, socket)
+        if let Some(connection) = self.connection.as_mut() {
+            connection.set_config(config);
+        }
 
     }
 
-    /// Establishes a connection with the server at the specified address by
-    /// using the specified socket for message sending.
-    ///
-    /// The server must use a compatible connection / packet configuration.
-    ///
-    /// The `handler` is a struct that implements the `Handler` trait in order
-    /// to handle events from the client and its connection.
-    ///
-    /// This method starts the tick loop, blocking the calling thread.
-    pub fn connect_from_socket<S: Socket, A: ToSocketAddrs>(
-        &mut self, handler: &mut Handler<Client>, addr: A, socket: S
+    /// Establishes a connection with the server at the specified address.
+    pub fn connect<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), Error> {
 
-    ) -> Result<(), Error> {
+        if self.socket.is_none() {
 
-        let mut state = try!(
-            self.connect_from_socket_sync(handler, addr, socket)
-        );
+            let socket = try!(S::new(
+                "0.0.0.0:0",
+                self.config.packet_max_size
+            ));
 
-        let tick_delay = 1000000000 / self.config.send_rate;
+            let peer_addr = try!(addr.to_socket_addrs()).nth(0).unwrap();
+            let local_addr = try!(socket.local_addr());
 
-        let mut tick_overflow = 0;
-        while self.running {
+            self.socket = Some(socket);
+            self.peer_address = Some(peer_addr);
+            self.local_address = Some(local_addr);
 
-            let tick_start = tick::start();
+            self.connection = Some(Connection::new(
+                self.config,
+                local_addr,
+                peer_addr,
+                R::new(self.config)
+            ));
 
-            self.receive_sync(handler, &mut state, tick_delay / 1000000);
-            self.tick_sync(handler, &mut state);
-            self.send_sync(handler, &mut state);
+            self.should_receive = true;
 
-            tick::end(tick_delay, tick_start, &mut tick_overflow, &self.config);
+            Ok(())
+
+        } else {
+            Err(Error::new(ErrorKind::AlreadyExists, ""))
+        }
+
+    }
+
+    /// Receives the next incoming message from the stream's underlying
+    /// connection.
+    pub fn receive(&mut self) -> Result<ClientEvent, TryRecvError> {
+
+        if self.socket.is_none() {
+            Err(TryRecvError::Disconnected)
+
+        } else {
+
+            if self.should_receive {
+
+                self.tick_start = tick::start();
+
+                let tick_delay = 1000000000 / self.config.send_rate;
+                let peer_address = self.peer_address.unwrap();
+
+                // Receive all incoming UDP packets to our local address
+                let mut bytes_received = 0;
+                while let Ok((addr, packet)) = self.socket.as_mut().unwrap().try_recv() {
+                    if addr == peer_address {
+                        bytes_received += packet.len();
+                        self.connection.as_mut().unwrap().receive_packet(
+                            packet,
+                            tick_delay / 1000000
+                        );
+                    }
+                }
+
+                self.stats_collector.set_bytes_received(bytes_received as u32);
+
+                // Map connection events
+                for e in self.connection.as_mut().unwrap().events() {
+                    self.events.push_back(match e {
+                        ConnectionEvent::Connected => ClientEvent::Connection,
+                        ConnectionEvent::Failed => ClientEvent::ConnectionFailed,
+                        ConnectionEvent::Lost => ClientEvent::ConnectionLost,
+                        ConnectionEvent::Closed(p) => ClientEvent::ConnectionClosed(p),
+                        ConnectionEvent::Message(payload) => ClientEvent::Message(payload),
+                        ConnectionEvent::CongestionStateChanged(c) => ClientEvent::ConnectionCongestionStateChanged(c),
+                        ConnectionEvent::PacketLost(payload) => ClientEvent::PacketLost(payload)
+                    });
+                }
+
+                self.should_receive = false;
+
+            }
+
+            if let Some(event) = self.events.pop_front() {
+                Ok(event)
+
+            } else {
+                Err(TryRecvError::Empty)
+            }
 
         }
 
-        self.close_sync(handler, &mut state)
-
     }
 
-    /// Asynchronously closes the connection to the server.
-    ///
-    /// This exits the tick loop, resets the connection and shuts down the
-    /// underlying socket the client was sending and receiving from.
-    pub fn close(&mut self) -> Result<(), Error>{
-        if self.running {
-            self.running = false;
+    /// Queues a message of the specified `kind` along with its `payload` to
+    /// be send with the next `flush` call.
+    pub fn send(&mut self, kind: MessageKind, payload: Vec<u8>) -> Result<(), Error> {
+        if self.socket.is_some() {
+            self.connection.as_mut().unwrap().send(kind, payload);
             Ok(())
 
         } else {
@@ -150,230 +238,72 @@ impl Client {
         }
     }
 
+    /// Sends all queued messages over the stream's underlying connection.
+    pub fn flush(&mut self, auto_delay: bool) -> Result<(), Error> {
+        if self.socket.is_some() {
 
-    // Non-Blocking, Synchronous API ------------------------------------------
-
-    /// Establishes a connection with the server at the specified address by
-    /// creating a local socket for message sending.
-    ///
-    /// The server must use a compatible connection / packet configuration.
-    ///
-    /// The `handler` is a struct that implements the `Handler` trait in order
-    /// to handle events from the client and its connection.
-    ///
-    /// This method returns a `ClientState` instance for this client, which can
-    /// be used with other synchronous `Client` methods.
-    pub fn connect_sync<A: ToSocketAddrs>(
-        &mut self, handler: &mut Handler<Client>, addr: A
-
-    ) -> Result<ClientState<UdpSocket>, Error> {
-
-        let socket = try!(UdpSocket::new(
-            "0.0.0.0:0",
-            self.config.packet_max_size
-        ));
-
-        self.connect_from_socket_sync(handler, addr, socket)
-
-    }
-
-    /// Establishes a connection with the server at the specified address by
-    /// using the specified socket for message sending.
-    ///
-    /// The server must use a compatible connection / packet configuration.
-    ///
-    /// The `handler` is a struct that implements the `Handler` trait in order
-    /// to handle events from the client and its connection.
-    ///
-    /// This method returns a `ClientState` instance for this client, which can
-    /// be used with other synchronous `Client` methods.
-    pub fn connect_from_socket_sync<A: ToSocketAddrs, S: Socket>(
-        &mut self, handler: &mut Handler<Client>, addr: A, socket: S
-
-    ) -> Result<ClientState<S>, Error> {
-
-        let peer_addr = try!(addr.to_socket_addrs()).nth(0).unwrap();
-        let local_addr = try!(socket.local_addr());
-
-        self.peer_address = Some(peer_addr);
-        self.local_address = Some(local_addr);
-        self.statistics.reset();
-        self.running = true;
-        self.closed = false;
-
-        let connection = Connection::new(
-            self.config,
-            local_addr,
-            peer_addr,
-            handler.rate_limiter(&self.config)
-        );
-
-        handler.connect(self);
-
-        Ok(ClientState::new(socket, connection, peer_addr))
-
-    }
-
-    /// Receives all currently buffered incoming packet from the underlying
-    /// connection.
-    pub fn receive_sync<S: Socket>(
-        &mut self,
-        handler: &mut Handler<Client>, state: &mut ClientState<S>,
-        tick_delay: u32
-    ) {
-
-        // Receive all incoming UDP packets from the specified remote
-        // address feeding them into our connection object for parsing
-        if !self.closed {
-            let mut bytes_received = 0;
-            while let Ok((addr, packet)) = state.socket.try_recv() {
-                if addr == state.peer_address {
-                    bytes_received += packet.len();
-                    state.connection.receive_packet(
-                        packet, tick_delay, self, handler
-                    );
-                }
-            }
-            self.statistics.set_bytes_received(bytes_received as u32);
-        }
-
-    }
-
-    /// Performs exactly one tick on the underlying connection.
-    pub fn tick_sync<S: Socket>(
-        &mut self, handler: &mut Handler<Client>, state: &mut ClientState<S>
-    ) {
-        if !self.closed {
-            handler.tick_connection(self, &mut state.connection);
-        }
-    }
-
-    /// Sends exactly one outgoing packet from the underlying connection.
-    pub fn send_sync<S: Socket>(
-        &mut self, handler: &mut Handler<Client>, state: &mut ClientState<S>
-    ) {
-        if !self.closed {
-            let bytes_sent = state.connection.send_packet(
-                &mut state.socket, &state.peer_address, self, handler
+            let peer_address = self.peer_address.unwrap();
+            let bytes_sent = self.connection.as_mut().unwrap().send_packet(
+                self.socket.as_mut().unwrap(),
+                &peer_address
             );
-            self.statistics.set_bytes_sent(bytes_sent);
-            self.statistics.tick();
-            state.stats = self.statistics.average();
-        }
-    }
 
-    /// Closes the connection to the server.
-    ///
-    /// This resets the connection and shuts down the underlying socket the
-    /// client was sending and receiving from.
-    pub fn close_sync<S: Socket>(
-        &mut self, handler: &mut Handler<Client>, state: &mut ClientState<S>
+            self.stats_collector.set_bytes_sent(bytes_sent);
+            self.stats_collector.tick();
+            self.should_receive = true;
 
-    ) -> Result<(), Error> {
+            self.stats = self.stats_collector.average();
 
-        if self.closed {
-            Err(Error::new(ErrorKind::NotConnected, ""))
+            if auto_delay {
+                tick::end(
+                    1000000000 / self.config.send_rate,
+                    self.tick_start,
+                    &mut self.tick_overflow,
+                    &self.config
+                );
+            }
+
+            Ok(())
 
         } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
+    }
 
-            self.closed = true;
+    /// Resets the client, clearing all pending events and resetting the
+    /// underlying connection to the server, returning it into the `Connecting`
+    /// state.
+    ///
+    /// This can be used to re-try a connection attempt if a previous one has
+    /// failed.
+    pub fn reset(&mut self) -> Result<(), Error> {
+        if self.socket.is_some() {
+            self.connection.as_mut().unwrap().reset();
+            self.stats_collector.reset();
+            self.events.clear();
+            self.tick_start = 0;
+            self.tick_overflow = 0;
+            Ok(())
 
-            handler.close(self);
-            state.connection.reset();
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
+    }
 
+    /// Closes the stream's underlying connection to the server.
+    pub fn close(&mut self) -> Result<(), Error> {
+        if self.socket.is_some() {
+            self.reset().ok();
+            self.should_receive = false;
             self.peer_address = None;
             self.local_address = None;
-
+            self.connection = None;
+            self.socket = None;
             Ok(())
 
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
         }
-
-    }
-
-    /// Consumes the `Client` instance converting it into a `ClientStream`.
-    pub fn into_stream(self) -> ClientStream {
-        ClientStream::from_client(self)
-    }
-
-}
-
-/// A structure used for synchronous calls on a `Client` instance.
-#[derive(Debug)]
-pub struct ClientState<S: Socket> {
-    socket: S,
-    connection: Connection,
-    peer_address: SocketAddr,
-    stats: Stats
-}
-
-impl<S: Socket> ClientState<S> {
-
-    // We need to encapsulate the above objects because they cannot be
-    // owned by the client itself without running into issues with multiple
-    // bindings of Self when trying to both call a method on it's
-    // connection and pass it to that method.
-    fn new(
-        socket: S,
-        connection: Connection,
-        peer_addr: SocketAddr
-
-    ) -> ClientState<S> {
-        ClientState {
-            socket: socket,
-            connection: connection,
-            peer_address: peer_addr,
-            stats: Stats {
-                bytes_sent: 0,
-                bytes_received: 0
-            }
-        }
-    }
-
-    /// Returns the average roundtrip time for this client's underlying
-    /// connection.
-    pub fn rtt(&self) -> u32 {
-        self.connection.rtt()
-    }
-
-    /// Returns the percent of packets that were sent and never acknowledged
-    /// over the total number of packets that have been send across this
-    /// client's underlying connection.
-    pub fn packet_loss(&self) -> f32 {
-        self.connection.packet_loss()
-    }
-
-    /// Returns statistics (i.e. bandwidth usage) for the last second, of this
-    /// client's underlying connection.
-    pub fn stats(&self) -> Stats {
-        self.stats
-    }
-
-    /// Returns the socket address for the local end of this client's
-    /// underlying connection.
-    pub fn local_addr(&self) -> SocketAddr {
-        self.connection.local_addr()
-    }
-
-    /// Returns the socket address for the remote end of this client's
-    /// underlying connection.
-    pub fn peer_addr(&self) -> SocketAddr {
-        self.peer_address
-    }
-
-    /// Overrides the configuration of this client's underlying connection.
-    pub fn set_config(&mut self, config: Config) {
-        self.connection.set_config(config);
-    }
-
-    /// Sends a message of the specified `kind` along with its `payload` over
-    /// this client's underlying connection.
-    pub fn send(&mut self, kind: MessageKind, payload: Vec<u8>) {
-        self.connection.send(kind, payload);
-    }
-
-    /// Resets this client's underlying connection state.
-    pub fn reset(&mut self) {
-        self.connection.reset();
     }
 
 }
