@@ -5,9 +5,15 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+
+
+// STD Dependencies -----------------------------------------------------------
 use std::cmp;
 use std::collections::{BinaryHeap, HashSet, VecDeque};
-use super::super::Config;
+
+
+// Internal Dependencies ------------------------------------------------------
+use ::Config;
 
 /// Maximum message ordering id before wrap around happens.
 const MAX_ORDER_ID: u16 = 4096;

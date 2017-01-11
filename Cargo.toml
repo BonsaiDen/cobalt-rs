@@ -15,8 +15,5 @@ rand = "0.3.14"
 clippy = { version = "*", optional = true }
 
 [features]
-packet_handler_lost = []
-packet_handler_compress = []
-all = ["packet_handler_lost", "packet_handler_compress"]
 lint = ["clippy"]
 

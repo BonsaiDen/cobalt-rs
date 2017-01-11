@@ -6,18 +6,22 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// STD Dependencies -----------------------------------------------------------
 use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc::TryRecvError;
 use std::collections::VecDeque;
 
+
+// Internal Dependencies ------------------------------------------------------
 use traits::socket::Socket;
 use shared::stats::{Stats, StatsCollector};
 use super::{
     Config,
     Connection, ConnectionEvent,
     MessageKind,
-    RateLimiter, tick
+    RateLimiter, PacketModifier,
+    tick
 };
 
 
@@ -51,12 +55,12 @@ pub enum ClientEvent {
 
 /// Implementation UDP socket client.
 #[derive(Debug)]
-pub struct Client<S: Socket, R: RateLimiter> {
+pub struct Client<S: Socket, R: RateLimiter, M: PacketModifier> {
     config: Config,
     socket: Option<S>,
-    connection: Option<Connection<R>>,
+    connection: Option<Connection<R, M>>,
     tick_start: u64,
-    tick_overflow: u32,
+    tick_overflow: u64,
     peer_address: Option<SocketAddr>,
     local_address: Option<SocketAddr>,
     events: VecDeque<ClientEvent>,
@@ -65,10 +69,10 @@ pub struct Client<S: Socket, R: RateLimiter> {
     stats: Stats
 }
 
-impl<S: Socket, R: RateLimiter> Client<S, R> {
+impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
 
     /// Creates a new client with the given configuration.
-    pub fn new(config: Config) -> Client<S, R> {
+    pub fn new(config: Config) -> Client<S, R, M> {
         Client {
             config: config,
             socket: None,
@@ -108,9 +112,19 @@ impl<S: Socket, R: RateLimiter> Client<S, R> {
     }
 
     /// Returns a mutable reference to underlying connection to the server.
-    pub fn connection(&mut self) -> Result<&mut Connection<R>, Error> {
+    pub fn connection(&mut self) -> Result<&mut Connection<R, M>, Error> {
         if let Some(connection) = self.connection.as_mut() {
             Ok(connection)
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
+    }
+
+    /// Returns a mutable reference to the client's underlying socket.
+    pub fn socket(&mut self) -> Result<&mut S, Error> {
+        if let Some(socket) = self.socket.as_mut() {
+            Ok(socket)
 
         } else {
             Err(Error::new(ErrorKind::NotConnected, ""))
@@ -155,7 +169,8 @@ impl<S: Socket, R: RateLimiter> Client<S, R> {
                 self.config,
                 local_addr,
                 peer_addr,
-                R::new(self.config)
+                R::new(self.config),
+                M::new(self.config)
             ));
 
             self.should_receive = true;

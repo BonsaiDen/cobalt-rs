@@ -11,7 +11,7 @@
 pub struct Config {
 
     /// Number of packets send per second. Default is `30`.
-    pub send_rate: u32,
+    pub send_rate: u64,
 
     /// Maximum bytes that can be received / send in one packet. Default
     /// `1400`.
@@ -23,15 +23,15 @@ pub struct Config {
 
     /// Maximum roundtrip-time in milliseconds before a packet is considered
     /// lost. Default is `1000`.
-    pub packet_drop_threshold: u32,
+    pub packet_drop_threshold: u64,
 
     /// Maximum time in milliseconds until the first packet must be received
     /// before a connection attempt fails. Default is `100`.
-    pub connection_init_threshold: u32,
+    pub connection_init_threshold: u64,
 
     /// Maximum time in milliseconds between any two packets before the
     /// connection gets dropped. Default is `1000`.
-    pub connection_drop_threshold: u32,
+    pub connection_drop_threshold: u64,
 
     /// The percent of available packet bytes to use when serializing
     /// `MessageKind::Instant` into a packet via a `MessageQueue`.

@@ -7,25 +7,31 @@
 // except according to those terms.
 extern crate clock_ticks;
 
+
+// STD Dependencies -----------------------------------------------------------
 use std::cmp;
 use std::thread;
 use std::time::Duration;
 
+
+// Internal Dependencies ------------------------------------------------------
 use super::Config;
 
+
+// Tick Rate Limiting ---------------------------------------------------------
 pub fn start() -> u64 {
     clock_ticks::precise_time_ns()
 }
 
 pub fn end(
-    tick_delay: u32,
+    tick_delay: u64,
     tick_start: u64,
-    overflow: &mut u32,
+    overflow: &mut u64,
     config: &Config
 ) {
 
     // Actual time taken by the tick
-    let time_taken = (clock_ticks::precise_time_ns() - tick_start) as u32;
+    let time_taken = clock_ticks::precise_time_ns() - tick_start;
 
     // Required delay reduction to keep tick rate
     let mut reduction = cmp::min(time_taken, tick_delay);
@@ -45,7 +51,7 @@ pub fn end(
 
         // This way we'll achieve a speed up effect in an effort to keep the
         // desired tick rate stable over a longer period of time
-        let reduced_overflow = cmp::max(0, *overflow as i64 - correction) as u32;
+        let reduced_overflow = cmp::max(0, *overflow as i64 - correction) as u64;
 
         // Adjust the reduction amount to speed up
         reduction += *overflow - reduced_overflow;
@@ -55,7 +61,7 @@ pub fn end(
 
     }
 
-    thread::sleep(Duration::new(0, tick_delay - reduction));
+    thread::sleep(Duration::new(0, (tick_delay - reduction) as u32));
 
 }
 

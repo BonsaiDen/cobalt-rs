@@ -5,12 +5,18 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+
+
+// STD Dependencies -----------------------------------------------------------
 use std::net;
 use std::fmt;
 use std::iter;
 use std::io::Error;
 use std::sync::mpsc::TryRecvError;
-use super::super::traits::socket::Socket;
+
+
+// Internal Dependencies ------------------------------------------------------
+use ::traits::socket::Socket;
 
 /// Non-blocking abstraction over a UDP socket.
 pub struct UdpSocket {

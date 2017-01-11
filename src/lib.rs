@@ -39,14 +39,19 @@ mod shared {
     pub mod config;
     pub mod connection;
     pub mod message_queue;
+    pub mod noop_packet_modifier;
     pub mod udp_socket;
     pub mod stats;
 }
 
 mod traits {
+    pub mod packet_modifier;
     pub mod rate_limiter;
     pub mod socket;
 }
+
+#[doc(inline)]
+pub use shared::binary_rate_limiter::BinaryRateLimiter;
 
 #[doc(inline)]
 pub use shared::config::Config;
@@ -64,13 +69,16 @@ pub use shared::connection::{
 pub use shared::message_queue::MessageKind;
 
 #[doc(inline)]
-pub use shared::binary_rate_limiter::BinaryRateLimiter;
+pub use shared::noop_packet_modifier::NoopPacketModifier;
 
 #[doc(inline)]
 pub use shared::udp_socket::UdpSocket;
 
 #[doc(inline)]
 pub use shared::stats::Stats;
+
+#[doc(inline)]
+pub use traits::packet_modifier::PacketModifier;
 
 #[doc(inline)]
 pub use traits::rate_limiter::RateLimiter;
@@ -87,11 +95,15 @@ pub use client::ClientEvent;
 #[doc(inline)]
 pub use server::Server;
 
+#[doc(inline)]
+pub use server::ServerEvent;
+
 #[cfg(test)]
 mod tests {
     mod client;
     mod connection;
     mod message_queue;
     mod mock;
+    mod server;
 }
 

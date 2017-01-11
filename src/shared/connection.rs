@@ -8,14 +8,18 @@
 extern crate rand;
 extern crate clock_ticks;
 
+// STD Dependencies -----------------------------------------------------------
 use std::cmp;
 use std::vec::Drain;
 use std::net::SocketAddr;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+
+
+// Internal Dependencies ------------------------------------------------------
 use super::message_queue::MessageQueue;
-use super::super::traits::socket::Socket;
-use super::super::{Config, MessageKind, RateLimiter};
+use ::traits::socket::Socket;
+use ::{Config, MessageKind, PacketModifier, RateLimiter};
 
 /// Maximum number of acknowledgement bits available in the packet header.
 const MAX_ACK_BITS: u32 = 32;
@@ -44,7 +48,7 @@ enum PacketState {
 #[derive(Debug)]
 struct SentPacketAck {
     seq: u32,
-    time: u32,
+    time: u64,
     state: PacketState,
     packet: Option<Vec<u8>>
 }
@@ -85,7 +89,7 @@ pub enum ConnectionEvent {
     Connected,
 
     /// Emitted when a connection attempt failed.
-    Failed,
+    Failed, // TODO rename to FailedToConnect?
 
     /// Emitted when the already established connection is lost.
     Lost,
@@ -123,11 +127,11 @@ pub struct ConnectionID(pub u32);
 
 
 /// Type alias for connection mappings.
-pub type ConnectionMap = HashMap<ConnectionID, Connection<RateLimiter>>;
+pub type ConnectionMap = HashMap<ConnectionID, Connection<RateLimiter, PacketModifier>>;
 
-/// Implementation of a reliable, virtual connection logic.
+/// Implementation of a reliable, virtual socket connection.
 #[derive(Debug)]
-pub struct Connection<R: RateLimiter> {
+pub struct Connection<R: RateLimiter, M: PacketModifier> {
 
     /// The connection's configuration
     config: Config,
@@ -154,7 +158,7 @@ pub struct Connection<R: RateLimiter> {
     smoothed_rtt: f32,
 
     /// Last time a packet was received
-    last_receive_time: u32,
+    last_receive_time: u64,
 
     /// Queue of recently received packets used for ack bitfield construction
     recv_ack_queue: VecDeque<u32>,
@@ -180,11 +184,15 @@ pub struct Connection<R: RateLimiter> {
     /// The rate limiter used to handle and avoid network congestion
     rate_limiter: R,
 
+    /// The packet modifier used for payload modification
+    packet_modifier: M,
+
+    /// List of accumulated connection events
     events: Vec<ConnectionEvent>
 
 }
 
-impl<R: RateLimiter> Connection<R> {
+impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
     /// Creates a new Virtual Connection over the given `SocketAddr`.
     ///
@@ -192,13 +200,18 @@ impl<R: RateLimiter> Connection<R> {
     ///
     /// ```
     /// use std::net::SocketAddr;
-    /// use cobalt::{BinaryRateLimiter, Connection, ConnectionState, Config, RateLimiter};
+    /// use cobalt::{
+    ///     BinaryRateLimiter,
+    ///     Connection, ConnectionState, Config,
+    ///     NoopPacketModifier, PacketModifier, RateLimiter
+    /// };
     ///
     /// let config = Config::default();
     /// let local_address: SocketAddr = "127.0.0.1:0".parse().unwrap();
     /// let peer_address: SocketAddr = "255.0.0.1:0".parse().unwrap();
     /// let limiter = BinaryRateLimiter::new(config);
-    /// let conn = Connection::new(config, local_address, peer_address, limiter);
+    /// let modifier = NoopPacketModifier::new(config);
+    /// let conn = Connection::new(config, local_address, peer_address, limiter, modifier);
     ///
     /// assert!(conn.state() == ConnectionState::Connecting);
     /// assert_eq!(conn.open(), true);
@@ -207,9 +220,10 @@ impl<R: RateLimiter> Connection<R> {
         config: Config,
         local_addr: SocketAddr,
         peer_addr: SocketAddr,
-        rate_limiter: R
+        rate_limiter: R,
+        packet_modifier: M
 
-    ) -> Connection<R> {
+    ) -> Connection<R, M> {
         Connection {
             config: config,
             random_id: ConnectionID(rand::random()),
@@ -219,7 +233,7 @@ impl<R: RateLimiter> Connection<R> {
             local_seq_number: 0,
             remote_seq_number: 0,
             smoothed_rtt: 0.0,
-            last_receive_time: precise_time_ms(),
+            last_receive_time: clock_ticks::precise_time_ms(),
             recv_ack_queue: VecDeque::new(),
             sent_ack_queue: Vec::new(),
             sent_packets: 0,
@@ -228,6 +242,7 @@ impl<R: RateLimiter> Connection<R> {
             lost_packets: 0,
             message_queue: MessageQueue::new(config),
             rate_limiter: rate_limiter,
+            packet_modifier: packet_modifier,
             events: Vec::new()
         }
     }
@@ -237,7 +252,11 @@ impl<R: RateLimiter> Connection<R> {
     /// # Examples
     ///
     /// ```
-    /// use cobalt::{BinaryRateLimiter, Connection, ConnectionID, Config};
+    /// use cobalt::{
+    ///     BinaryRateLimiter,
+    ///     Connection, ConnectionID, Config,
+    ///     NoopPacketModifier
+    /// };
     ///
     /// let config = Config {
     ///     protocol_header: [11, 22, 33, 44],
@@ -252,7 +271,7 @@ impl<R: RateLimiter> Connection<R> {
     ///      0,  0, 0,  0
     /// ];
     ///
-    /// let conn_id = Connection::<BinaryRateLimiter>::id_from_packet(&config, &packet);
+    /// let conn_id = Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(&config, &packet);
     ///
     /// assert!(conn_id == Some(ConnectionID(16909060)));
     /// ```
@@ -356,7 +375,7 @@ impl<R: RateLimiter> Connection<R> {
     }
 
     /// Receives a incoming UDP packet.
-    pub fn receive_packet(&mut self, packet: Vec<u8>, tick_delay: u32) {
+    pub fn receive_packet(&mut self, packet: Vec<u8>, tick_delay: u64) {
 
         // Ignore any packets shorter then the header length
         if packet.len() < PACKET_HEADER_SIZE {
@@ -369,7 +388,7 @@ impl<R: RateLimiter> Connection<R> {
         }
 
         // Update time used for disconnect detection
-        self.last_receive_time = precise_time_ms();
+        self.last_receive_time = clock_ticks::precise_time_ms();
 
         // Read remote sequence number
         self.remote_seq_number = packet[8] as u32;
@@ -428,21 +447,14 @@ impl<R: RateLimiter> Connection<R> {
         }
 
         // Push packet data into message queue
-        /*
-        if cfg!(feature = "packet_handler_compress") {
+        if let Some(modified) = self.packet_modifier.incoming(
+            &packet[PACKET_HEADER_SIZE..]
+        ) {
+            self.message_queue.receive_packet(&modified[..]);
 
-            // Optional packet decompression
-            let packet = handler.connection_packet_decompress(
-                owner, self,
-                &packet[PACKET_HEADER_SIZE..]
-            );
-
-            self.message_queue.receive_packet(&packet[..]);
-
-        } else {*/
+        } else {
             self.message_queue.receive_packet(&packet[PACKET_HEADER_SIZE..]);
-
-        //}
+        }
 
         // Remove all acknowledged and lost packets from the sent ack queue
         self.sent_ack_queue.retain(|p| p.state == PacketState::Unknown);
@@ -553,14 +565,12 @@ impl<R: RateLimiter> Connection<R> {
         }
 
         // Send packet to socket
-        let bytes_sent = /*if cfg!(feature = "packet_handler_compress") {
+        let bytes_sent = if let Some(mut modified) = self.packet_modifier.outgoing(
+            &packet[PACKET_HEADER_SIZE..]
+        ) {
 
-            // Optional packet compression
-            let packet = handler.connection_packet_compress(
-                owner, self,
-                packet[..PACKET_HEADER_SIZE].to_vec(),
-                &packet[PACKET_HEADER_SIZE..]
-            );
+            let mut packet = packet[..PACKET_HEADER_SIZE].to_vec();
+            packet.append(&mut modified);
 
             socket.send_to(
                 &packet[..], *addr
@@ -570,7 +580,7 @@ impl<R: RateLimiter> Connection<R> {
             // Number of all bytes sent
             packet.len()
 
-        } else*/ {
+        } else {
             socket.send_to(
                 &packet[..], *addr
 
@@ -585,7 +595,7 @@ impl<R: RateLimiter> Connection<R> {
         if self.send_ack_required(self.local_seq_number) {
             self.sent_ack_queue.push(SentPacketAck {
                 seq: self.local_seq_number,
-                time: precise_time_ms(),
+                time: clock_ticks::precise_time_ms(),
                 state: PacketState::Unknown,
                 packet: Some(packet)
             });
@@ -615,7 +625,7 @@ impl<R: RateLimiter> Connection<R> {
         self.local_seq_number = 0;
         self.remote_seq_number = 0;
         self.smoothed_rtt = 0.0;
-        self.last_receive_time = precise_time_ms();
+        self.last_receive_time = clock_ticks::precise_time_ms();
         self.recv_ack_queue.clear();
         self.sent_ack_queue.clear();
         self.sent_packets = 0;
@@ -686,7 +696,7 @@ impl<R: RateLimiter> Connection<R> {
     fn update_send_state(&mut self) -> bool {
 
         // Calculate time since last received packet
-        let inactive_time = precise_time_ms() - self.last_receive_time;
+        let inactive_time = clock_ticks::precise_time_ms() - self.last_receive_time;
 
         match self.state {
 
@@ -774,9 +784,5 @@ fn seq_was_acked(seq: u32, ack: u32, bitfield: u32) -> bool {
         let bit = seq_bit_index(seq, ack);
         bit < MAX_ACK_BITS && (bitfield & (1 << bit)) != 0
     }
-}
-
-fn precise_time_ms() -> u32 {
-    (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 

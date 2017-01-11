@@ -5,41 +5,26 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
 
+// STD Dependencies -----------------------------------------------------------
 use std::cmp;
-use std::net;
-use std::thread;
 use std::io::Error;
-use std::time::Duration;
-use std::net::ToSocketAddrs;
-use std::collections::HashMap;
+use std::net::{SocketAddr, ToSocketAddrs};
+use std::collections::VecDeque;
+use std::sync::mpsc::TryRecvError;
 
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 
+// Internal Dependencies ------------------------------------------------------
 use super::super::{
-    BinaryRateLimiter, Config, Connection, ConnectionID, ConnectionEvent,
-    MessageKind, Socket, RateLimiter
+    BinaryRateLimiter, NoopPacketModifier,
+    Config, Connection, ConnectionEvent,
+    Socket, RateLimiter, PacketModifier
 };
-
-#[macro_export]
-macro_rules! assert_epsilon {
-    ($value:expr, $target:expr, $difference:expr) => {
-        {
-            let min = $target - $difference;
-            let max = $target + $difference;
-            if $value < min || $value > max {
-                panic!(format!("Value {} not in range {} - {}", $value, min, max));
-            }
-        }
-    }
-}
 
 
 // Mock Packet Data Abstraction -----------------------------------------------
-#[derive(Clone, Eq, PartialEq)]
-pub struct MockPacket(net::SocketAddr, Vec<u8>);
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct MockPacket(SocketAddr, Vec<u8>);
 
 impl Ord for MockPacket {
 
@@ -56,110 +41,55 @@ impl PartialOrd for MockPacket {
 
 
 // Client / Server Socket Abstraction -----------------------------------------
+#[derive(Debug)]
 pub struct MockSocket {
-    addr: net::SocketAddr,
-    incoming: Receiver<MockPacket>,
-    incoming_sender: Option<Sender<MockPacket>>,
-    outgoing: Sender<MockPacket>,
-    sent_packets: Arc<Mutex<Vec<MockPacket>>>,
-    received_packets: Arc<Mutex<Vec<MockPacket>>>
-}
-
-impl MockSocket {
-
-    pub fn create<T: ToSocketAddrs>(
-        address: T,
-        incoming: Receiver<MockPacket>,
-        outgoing: Sender<MockPacket>,
-        incoming_sender: Option<Sender<MockPacket>>
-
-    ) -> Self {
-        MockSocket {
-            addr: to_socket_addr(address),
-            incoming: incoming,
-            incoming_sender: incoming_sender,
-            outgoing: outgoing,
-            sent_packets: Arc::new(Mutex::new(Vec::new())),
-            received_packets: Arc::new(Mutex::new(Vec::new()))
-        }
-    }
-
-    //pub fn from_address_pair<T: ToSocketAddrs>(client_addr: T, server_addr: T) -> (MockSocket, MockSocket) {
-    //    let (server_outgoing, client_incoming) = channel::<MockPacket>();
-    //    let (client_outgoing, server_incoming) = channel::<MockPacket>();
-    //    (
-    //        MockSocket::new(client_addr, client_incoming, client_outgoing, None),
-    //        MockSocket::new(server_addr, server_incoming, server_outgoing, None)
-    //    )
-    //}
-
-    pub fn handle(&self) -> MockSocketHandle {
-        MockSocketHandle {
-            sent_index: 0,
-            sent_packets: self.sent_packets.clone(),
-            //received_index: 0,
-            //received_packets: self.received_packets.clone()
-        }
-    }
-
-    pub fn receive<T: ToSocketAddrs>(&self, packets: Vec<(T, Vec<u8>)>)  {
-        if let Some(ref incoming_sender) = self.incoming_sender {
-            for (addr, data) in packets.into_iter() {
-                incoming_sender.send(MockPacket(to_socket_addr(addr), data)).ok();
-            }
-        }
-    }
-
+    local_addr: SocketAddr,
+    sent_index: usize,
+    pub incoming: VecDeque<MockPacket>,
+    pub outgoing: Vec<MockPacket>
 }
 
 impl Socket for MockSocket {
 
     fn new<T: ToSocketAddrs>(addr: T, _: usize) -> Result<MockSocket, Error> {
-        let (incoming_sender, incoming) = channel::<MockPacket>();
-        let (outgoing, _) = channel::<MockPacket>();
-        Ok(MockSocket::create(addr, incoming, outgoing, Some(incoming_sender)))
+        Ok(MockSocket {
+            local_addr: to_socket_addr(addr),
+            sent_index: 0,
+            incoming: VecDeque::new(),
+            outgoing: Vec::new()
+        })
     }
 
-    fn try_recv(&mut self) -> Result<(net::SocketAddr, Vec<u8>), TryRecvError> {
-        match self.incoming.try_recv() {
-            Ok(packet) => {
-                let mut received_packets = self.received_packets.lock().unwrap();
-                received_packets.push(packet.clone());
-                Ok((packet.0, packet.1))
-            },
-            Err(err) => Err(err)
+    fn try_recv(&mut self) -> Result<(SocketAddr, Vec<u8>), TryRecvError> {
+        if let Some(packet) = self.incoming.pop_front() {
+            Ok((packet.0, packet.1))
+
+        } else {
+            Err(TryRecvError::Empty)
         }
     }
 
     fn send_to(
-        &mut self, data: &[u8], addr: net::SocketAddr)
+        &mut self,
+        data: &[u8],
+        addr: SocketAddr
 
-    -> Result<usize, Error> {
-        self.outgoing.send(MockPacket(addr, data.to_vec())).ok();
-        let mut sent_packets = self.sent_packets.lock().unwrap();
-        sent_packets.push(MockPacket(addr, data.to_vec()));
+    ) -> Result<usize, Error> {
+        self.outgoing.push(MockPacket(addr, data.to_vec()));
         Ok(data.len())
     }
 
-    fn local_addr(&self) -> Result<net::SocketAddr, Error> {
-        Ok(self.addr)
+    fn local_addr(&self) -> Result<SocketAddr, Error> {
+        Ok(self.local_addr)
     }
 
 }
 
-pub struct MockSocketHandle {
-    sent_index: usize,
-    sent_packets: Arc<Mutex<Vec<MockPacket>>>,
-    //received_index: usize,
-    //received_packets: Arc<Mutex<Vec<MockPacket>>>
-}
-
-impl MockSocketHandle {
+impl MockSocket {
 
     pub fn sent(&mut self) -> Vec<MockPacket> {
 
-        let sent_packets = self.sent_packets.lock().unwrap();
-        let packets: Vec<MockPacket> = sent_packets.iter().skip(self.sent_index).map(|packet| {
+        let packets: Vec<MockPacket> = self.outgoing.iter().skip(self.sent_index).map(|packet| {
             packet.clone()
 
         }).collect();
@@ -168,19 +98,6 @@ impl MockSocketHandle {
         packets
 
     }
-
-    //pub fn received(&mut self) -> Vec<MockPacket> {
-
-    //    let received_packets = self.received_packets.lock().unwrap();
-    //    let packets: Vec<MockPacket> = received_packets.iter().skip(self.received_index).map(|packet| {
-    //        packet.clone()
-
-    //    }).collect();
-
-    //    self.received_index += packets.len();
-    //    packets
-
-    //}
 
     pub fn assert_sent_none(&mut self) {
         let sent = self.sent();
@@ -259,7 +176,7 @@ impl MockSocketHandle {
 
 
 // Helpers --------------------------------------------------------------------
-fn check_server_messages(conn: &mut Connection<BinaryRateLimiter>) {
+fn check_server_messages(conn: &mut Connection<BinaryRateLimiter, NoopPacketModifier>) {
 
     let mut messages = Vec::new();
     for m in conn.events() {
@@ -275,29 +192,25 @@ fn check_server_messages(conn: &mut Connection<BinaryRateLimiter>) {
 
 }
 
-fn to_socket_addr<T: ToSocketAddrs>(address: T) -> net::SocketAddr {
+fn to_socket_addr<T: ToSocketAddrs>(address: T) -> SocketAddr {
     address.to_socket_addrs().unwrap().nth(0).unwrap()
 }
 
-fn precise_time_ms() -> u32 {
-    (clock_ticks::precise_time_ns() / 1000000) as u32
-}
-
-pub fn create_connection(config: Option<Config>) -> Connection<BinaryRateLimiter> {
+pub fn create_connection(config: Option<Config>) -> Connection<BinaryRateLimiter, NoopPacketModifier> {
     let config = config.unwrap_or_else(||Config::default());
-    let local_address: net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
-    let peer_address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
+    let local_address: SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    let peer_address: SocketAddr = "255.1.1.2:5678".parse().unwrap();
     let limiter = BinaryRateLimiter::new(config);
-    Connection::new(config, local_address, peer_address, limiter)
+    let modifier = NoopPacketModifier::new(config);
+    Connection::new(config, local_address, peer_address, limiter, modifier)
 
 }
 
 pub fn create_socket(config: Option<Config>) -> (
-    Connection<BinaryRateLimiter>, MockSocket, MockSocketHandle
+    Connection<BinaryRateLimiter, NoopPacketModifier>, MockSocket
 ) {
     let conn = create_connection(config);
     let socket = MockSocket::new(conn.local_addr(), 0).unwrap();
-    let socket_handle = socket.handle();
-    (conn, socket, socket_handle)
+    (conn, socket)
 }
 

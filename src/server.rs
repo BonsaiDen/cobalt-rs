@@ -6,18 +6,23 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// STD Dependencies -----------------------------------------------------------
 use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc::TryRecvError;
 use std::collections::{HashMap, VecDeque};
 
+
+// Internal Dependencies ------------------------------------------------------
 use traits::socket::Socket;
 use shared::stats::{Stats, StatsCollector};
 use super::{
     Config,
     ConnectionID, Connection, ConnectionEvent,
     MessageKind,
-    RateLimiter, tick
+    RateLimiter,
+    PacketModifier,
+    tick
 };
 
 
@@ -48,13 +53,13 @@ pub enum ServerEvent {
 
 /// Implementation of a multi-client UDP socket server.
 #[derive(Debug)]
-pub struct Server<S: Socket, R: RateLimiter> {
+pub struct Server<S: Socket, R: RateLimiter, M: PacketModifier> {
     config: Config,
     socket: Option<S>,
-    connections: HashMap<ConnectionID, Connection<R>>,
+    connections: HashMap<ConnectionID, Connection<R, M>>,
     addresses: HashMap<ConnectionID, SocketAddr>,
     tick_start: u64,
-    tick_overflow: u32,
+    tick_overflow: u64,
     local_address: Option<SocketAddr>,
     events: VecDeque<ServerEvent>,
     should_receive: bool,
@@ -62,10 +67,10 @@ pub struct Server<S: Socket, R: RateLimiter> {
     stats: Stats
 }
 
-impl<S: Socket, R: RateLimiter> Server<S, R> {
+impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
     /// Creates a new server with the given configuration.
-    pub fn new(config: Config) -> Server<S, R> {
+    pub fn new(config: Config) -> Server<S, R, M> {
         Server {
             config: config,
             socket: None,
@@ -100,13 +105,38 @@ impl<S: Socket, R: RateLimiter> Server<S, R> {
     }
 
     /// Returns a mutable reference to the specified client connection.
-    pub fn connection(&mut self, id: &ConnectionID) -> Option<&mut Connection<R>> {
-        self.connections.get_mut(id)
+    pub fn connection(&mut self, id: &ConnectionID) -> Result<&mut Connection<R, M>, Error> {
+        if self.socket.is_some() {
+            if let Some(conn) = self.connections.get_mut(id) {
+                Ok(conn)
+
+            } else {
+                Err(Error::new(ErrorKind::NotFound, ""))
+            }
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
     }
 
     /// Returns a mutable reference to the servers client connections.
-    pub fn connections(&mut self) -> &mut HashMap<ConnectionID, Connection<R>> {
-        &mut self.connections
+    pub fn connections(&mut self) -> Result<&mut HashMap<ConnectionID, Connection<R, M>>, Error> {
+        if self.socket.is_some() {
+            Ok(&mut self.connections)
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
+    }
+
+    /// Returns a mutable reference to the server's underlying socket.
+    pub fn socket(&mut self) -> Result<&mut S, Error> {
+        if let Some(socket) = self.socket.as_mut() {
+            Ok(socket)
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
     }
 
     /// Returns the server's current configuration.
@@ -167,7 +197,7 @@ impl<S: Socket, R: RateLimiter> Server<S, R> {
                 while let Ok((addr, packet)) = self.socket.as_mut().unwrap().try_recv() {
 
                     // Try to extract the connection id from the packet
-                    if let Some(id) = Connection::<R>::id_from_packet(&self.config, &packet) {
+                    if let Some(id) = Connection::<R, M>::id_from_packet(&self.config, &packet) {
 
                         // Retrieve or create a connection for the current
                         // connection id
@@ -178,7 +208,8 @@ impl<S: Socket, R: RateLimiter> Server<S, R> {
                                 config,
                                 local_address,
                                 addr,
-                                R::new(config)
+                                R::new(config),
+                                M::new(config)
                             );
 
                             inserted_address = Some(addr);
@@ -317,7 +348,7 @@ impl<S: Socket, R: RateLimiter> Server<S, R> {
         }
     }
 
-    /// Shuts down the stream's underlying server, resetting all connections.
+    /// Shuts down the stream's underlying server, resetting all client connections.
     pub fn shutdown(&mut self) -> Result<(), Error> {
         if self.socket.is_some() {
             self.should_receive = false;

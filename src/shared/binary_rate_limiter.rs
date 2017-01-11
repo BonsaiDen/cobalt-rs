@@ -7,8 +7,12 @@
 // except according to those terms.
 extern crate clock_ticks;
 
+// STD Dependencies -----------------------------------------------------------
 use std::cmp;
-use super::super::{Config, RateLimiter};
+
+
+// Internal Dependencies ------------------------------------------------------
+use ::{Config, RateLimiter};
 
 /// Minimum time before switching back into good mode in milliseconds.
 const MIN_GOOD_MODE_TIME_DELAY: u32 = 1000;
