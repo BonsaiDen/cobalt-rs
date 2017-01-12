@@ -85,7 +85,7 @@ fn test_server_disconnected() {
 
     assert_eq!(server.local_addr().unwrap_err().kind(), ErrorKind::AddrNotAvailable);
     assert_eq!(server.connection(&conn_id).unwrap_err().kind(), ErrorKind::NotConnected);
-    assert_eq!(server.connections().unwrap_err().kind(), ErrorKind::NotConnected);
+    assert_eq!(server.connections().len(), 0);
 
     assert_eq!(server.accept_receive(), Err(TryRecvError::Disconnected));
     assert_eq!(server.send(&conn_id, MessageKind::Instant, Vec::new()).unwrap_err().kind(), ErrorKind::NotConnected);
@@ -95,13 +95,13 @@ fn test_server_disconnected() {
 }
 
 #[test]
-fn test_server_bind_shutdown() {
+fn test_server_listen_shutdown() {
 
     let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
 
-    assert!(server.bind("127.0.0.1:1234").is_ok());
+    assert!(server.listen("127.0.0.1:1234").is_ok());
 
-    assert_eq!(server.bind("127.0.0.1:1234").unwrap_err().kind(), ErrorKind::AlreadyExists);
+    assert_eq!(server.listen("127.0.0.1:1234").unwrap_err().kind(), ErrorKind::AlreadyExists);
     assert!(server.socket().is_ok());
 
     assert!(server.shutdown().is_ok());
@@ -116,7 +116,7 @@ fn test_server_flow_without_connections() {
 
     let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
 
-    assert!(server.bind("127.0.0.1:1234").is_ok());
+    assert!(server.listen("127.0.0.1:1234").is_ok());
 
     assert_eq!(server.accept_receive(), Err(TryRecvError::Empty));
 
@@ -130,7 +130,7 @@ fn test_server_flow_without_connections() {
 fn test_server_flush_without_delay() {
 
     let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
-    server.bind("127.0.0.1:1234").ok();
+    server.listen("127.0.0.1:1234").ok();
 
     let start = clock_ticks::precise_time_ms();
     for _ in 0..5 {
@@ -145,7 +145,7 @@ fn test_server_flush_without_delay() {
 fn test_server_flush_auto_delay() {
 
     let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
-    server.bind("127.0.0.1:1234").ok();
+    server.listen("127.0.0.1:1234").ok();
 
     let start = clock_ticks::precise_time_ms();
     for _ in 0..5 {

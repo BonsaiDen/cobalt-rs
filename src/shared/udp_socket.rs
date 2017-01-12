@@ -16,7 +16,7 @@ use std::sync::mpsc::TryRecvError;
 
 
 // Internal Dependencies ------------------------------------------------------
-use ::traits::socket::Socket;
+use ::Socket;
 
 /// Non-blocking abstraction over a UDP socket.
 pub struct UdpSocket {

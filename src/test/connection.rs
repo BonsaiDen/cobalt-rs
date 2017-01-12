@@ -777,11 +777,15 @@ fn test_packet_modification() {
         }
 
         fn incoming(&mut self, data: &[u8]) -> Option<Vec<u8>> {
+
+            assert_eq!([1, 2, 3, 4, 128, 96, 7].to_vec(), data);
+
             // Inject to messages
             Some(vec![
                 0, 0, 0, 3, 70, 111, 111, // Foo
                 0, 0, 0, 3, 66, 97, 114 // Bar
             ])
+
         }
 
     }
@@ -811,8 +815,6 @@ fn test_packet_modification() {
             0,
             0, 0, 0, 0
 
-            // Compression Handler will remove all packet data here
-
         ].to_vec())
     ]);
 
@@ -821,8 +823,8 @@ fn test_packet_modification() {
         1, 2, 3, 4,
         0, 0, 0, 0,
         0, 0, 0, 0,
-        0, 0
-        // Decompression handler will inject the packet data here
+        0, 0,
+        1, 2, 3, 4, 128, 96, 7
 
     ].to_vec(), 0);
 

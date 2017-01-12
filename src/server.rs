@@ -14,15 +14,13 @@ use std::collections::{HashMap, VecDeque};
 
 
 // Internal Dependencies ------------------------------------------------------
-use traits::socket::Socket;
 use shared::stats::{Stats, StatsCollector};
+use shared::tick;
 use super::{
     Config,
     ConnectionID, Connection, ConnectionEvent,
     MessageKind,
-    RateLimiter,
-    PacketModifier,
-    tick
+    RateLimiter, PacketModifier, Socket
 };
 
 
@@ -51,7 +49,44 @@ pub enum ServerEvent {
 }
 
 
-/// Implementation of a multi-client UDP socket server.
+/// Implementation of a multi-client low latency socket server.
+///
+/// # Basic Usage
+///
+/// ```
+/// use cobalt::{
+///     BinaryRateLimiter, Server, Config, NoopPacketModifier, MessageKind, UdpSocket
+/// };
+///
+/// // Create a new server that communicates over a udp socket
+/// let mut server = Server::<UdpSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+///
+/// // Make the server listen on port `1234` on all interfaces.
+/// server.listen("0.0.0.0:1234").expect("Failed to bind to socket.");
+///
+/// // loop {
+///
+///     // Accept incoming connections and fetch their events
+///     while let Ok(event) = server.accept_receive() {
+///         // Handle events (e.g. Connection, Messages, etc.)
+///     }
+///
+///     // Send a message to all of the servers clients
+///     for (_, conn) in server.connections() {
+///         conn.send(MessageKind::Instant, b"Ping".to_vec());
+///     }
+///
+///     // Flush all pending outgoing messages.
+///     //
+///     // Also auto delay the current thread to achieve the configured tick rate.
+///     server.flush(false).is_ok();
+///
+/// // }
+///
+/// // Shutdown the server (freeing its socket and closing all its connections)
+/// server.shutdown().is_ok();
+/// ```
+///
 #[derive(Debug)]
 pub struct Server<S: Socket, R: RateLimiter, M: PacketModifier> {
     config: Config,
@@ -120,13 +155,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
     }
 
     /// Returns a mutable reference to the servers client connections.
-    pub fn connections(&mut self) -> Result<&mut HashMap<ConnectionID, Connection<R, M>>, Error> {
-        if self.socket.is_some() {
-            Ok(&mut self.connections)
-
-        } else {
-            Err(Error::new(ErrorKind::NotConnected, ""))
-        }
+    pub fn connections(&mut self) -> &mut HashMap<ConnectionID, Connection<R, M>> {
+        &mut self.connections
     }
 
     /// Returns a mutable reference to the server's underlying socket.
@@ -150,8 +180,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
         self.stats_collector.set_config(config);
     }
 
-    /// Binds the server to the specified address.
-    pub fn bind<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), Error> {
+    /// Binds the server to listen the specified address.
+    pub fn listen<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), Error> {
 
         if self.socket.is_none() {
 

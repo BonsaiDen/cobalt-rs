@@ -15,7 +15,7 @@ use std::time::Duration;
 
 
 // Internal Dependencies ------------------------------------------------------
-use super::Config;
+use ::shared::config::Config;
 
 
 // Tick Rate Limiting ---------------------------------------------------------

@@ -18,8 +18,7 @@ use std::collections::VecDeque;
 
 // Internal Dependencies ------------------------------------------------------
 use super::message_queue::MessageQueue;
-use ::traits::socket::Socket;
-use ::{Config, MessageKind, PacketModifier, RateLimiter};
+use ::{Config, MessageKind, PacketModifier, RateLimiter, Socket};
 
 /// Maximum number of acknowledgement bits available in the packet header.
 const MAX_ACK_BITS: u32 = 32;

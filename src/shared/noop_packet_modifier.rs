@@ -11,7 +11,7 @@
 use ::{Config, PacketModifier};
 
 
-/// Implementation of a noop packet modifier.
+/// Implementation of a packet modifier which does nothing.
 #[derive(Debug, Copy, Clone)]
 pub struct NoopPacketModifier;
 

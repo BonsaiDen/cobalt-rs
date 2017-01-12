@@ -8,7 +8,7 @@
 
 //! **cobalt** is a networking library which provides [virtual connections
 //! over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/)
-//! for both unreliable, reliable and optional in-order delivery of messages.
+//! for both reliable and unreliable messages with optional in-order delivery.
 //!
 //! It is primarily designed to be used as the basis of real-time, low latency,
 //! single server / multi client systems.
@@ -30,80 +30,29 @@
     unsafe_code,
     unused_import_braces, unused_qualifications
 )]
+mod shared;
+mod traits;
 mod client;
 mod server;
-mod tick;
 
-mod shared {
-    pub mod binary_rate_limiter;
-    pub mod config;
-    pub mod connection;
-    pub mod message_queue;
-    pub mod noop_packet_modifier;
-    pub mod udp_socket;
-    pub mod stats;
-}
 
-mod traits {
-    pub mod packet_modifier;
-    pub mod rate_limiter;
-    pub mod socket;
-}
-
-#[doc(inline)]
-pub use shared::binary_rate_limiter::BinaryRateLimiter;
-
-#[doc(inline)]
-pub use shared::config::Config;
-
-#[doc(inline)]
-pub use shared::connection::{
+// Exports --------------------------------------------------------------------
+pub use shared::{
+    BinaryRateLimiter,
+    Config,
     Connection,
     ConnectionID,
     ConnectionMap,
     ConnectionState,
-    ConnectionEvent
+    ConnectionEvent,
+    MessageKind,
+    NoopPacketModifier,
+    UdpSocket
 };
-
-#[doc(inline)]
-pub use shared::message_queue::MessageKind;
-
-#[doc(inline)]
-pub use shared::noop_packet_modifier::NoopPacketModifier;
-
-#[doc(inline)]
-pub use shared::udp_socket::UdpSocket;
-
-#[doc(inline)]
-pub use shared::stats::Stats;
-
-#[doc(inline)]
-pub use traits::packet_modifier::PacketModifier;
-
-#[doc(inline)]
-pub use traits::rate_limiter::RateLimiter;
-
-#[doc(inline)]
-pub use traits::socket::Socket;
-
-#[doc(inline)]
-pub use client::Client;
-
-#[doc(inline)]
-pub use client::ClientEvent;
-
-#[doc(inline)]
-pub use server::Server;
-
-#[doc(inline)]
-pub use server::ServerEvent;
+pub use traits::*;
+pub use client::*;
+pub use server::*;
 
 #[cfg(test)]
-mod tests {
-    mod client;
-    mod connection;
-    mod message_queue;
-    mod mock;
-    mod server;
-}
+mod test;
 

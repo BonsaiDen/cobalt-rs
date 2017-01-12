@@ -87,6 +87,12 @@ impl Socket for MockSocket {
 
 impl MockSocket {
 
+    pub fn mock_receive<T: ToSocketAddrs>(&mut self, packets: Vec<(T, Vec<u8>)>) {
+        for p in packets {
+            self.incoming.push_back(MockPacket(to_socket_addr(p.0), p.1));
+        }
+    }
+
     pub fn sent(&mut self) -> Vec<MockPacket> {
 
         let packets: Vec<MockPacket> = self.outgoing.iter().skip(self.sent_index).map(|packet| {
@@ -117,7 +123,7 @@ impl MockSocket {
     fn assert_sent_sorted<T: ToSocketAddrs>(&mut self, expected: Vec<(T, Vec<u8>)>, sort_by_addr: bool) {
 
 
-        // In some cases we need need a reliable assert order so we sort the sent
+        // In some cases we need a reliable assert order so we sort the sent
         // packets by their address
         let sent = if sort_by_addr {
             let mut sent = self.sent();
@@ -197,7 +203,8 @@ fn to_socket_addr<T: ToSocketAddrs>(address: T) -> SocketAddr {
 }
 
 pub fn create_socket(config: Option<Config>) -> (
-    Connection<BinaryRateLimiter, NoopPacketModifier>, MockSocket
+    Connection<BinaryRateLimiter, NoopPacketModifier>,
+    MockSocket
 ) {
     let conn = create_connection(config);
     let socket = MockSocket::new(conn.local_addr(), 0).unwrap();

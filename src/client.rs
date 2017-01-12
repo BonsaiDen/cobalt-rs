@@ -14,14 +14,13 @@ use std::collections::VecDeque;
 
 
 // Internal Dependencies ------------------------------------------------------
-use traits::socket::Socket;
 use shared::stats::{Stats, StatsCollector};
+use shared::tick;
 use super::{
     Config,
     Connection, ConnectionEvent,
     MessageKind,
-    RateLimiter, PacketModifier,
-    tick
+    RateLimiter, PacketModifier, Socket
 };
 
 
@@ -53,7 +52,41 @@ pub enum ClientEvent {
 
 }
 
-/// Implementation UDP socket client.
+/// Implementation of a low latency socket client.
+///
+/// # Basic Usage
+///
+/// ```
+/// use cobalt::{
+///     BinaryRateLimiter, Client, Config, NoopPacketModifier, MessageKind, UdpSocket
+/// };
+///
+/// // Create a new client that communicates over a udp socket
+/// let mut client = Client::<UdpSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+///
+/// // Initiate a connection to the server
+/// client.connect("127.0.0.1:1234").expect("Failed to bind to socket");
+///
+/// // loop {
+///
+///     // Fetch connection events
+///     while let Ok(event) = client.receive() {
+///         // Handle events (e.g. Connection, Messages, etc.)
+///     }
+///
+///     // Schedule a message to the send to the server
+///     client.send(MessageKind::Instant, b"Ping".to_vec());
+///
+///     // Flush all pending outgoing messages.
+///     //
+///     // Also auto delay the current thread to achieve the configured tick rate.
+///     client.flush(true);
+///
+/// // }
+///
+/// // Close the connection and unbind its socket
+/// client.close();
+/// ```
 #[derive(Debug)]
 pub struct Client<S: Socket, R: RateLimiter, M: PacketModifier> {
     config: Config,

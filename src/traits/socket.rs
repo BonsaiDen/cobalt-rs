@@ -12,7 +12,7 @@ use std::fmt;
 use std::io::Error;
 use std::sync::mpsc::TryRecvError;
 
-/// Trait describing of a non-blocking UDP socket.
+/// Trait describing a non-blocking low latency socket.
 pub trait Socket: fmt::Debug {
 
     /// Method that tries to bind a new socket at the specified address.
