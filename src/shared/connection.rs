@@ -447,10 +447,10 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         }
 
         // Push packet data into message queue
-        if let Some(modified) = self.packet_modifier.incoming(
+        if let Some(payload) = self.packet_modifier.incoming(
             &packet[PACKET_HEADER_SIZE..]
         ) {
-            self.message_queue.receive_packet(&modified[..]);
+            self.message_queue.receive_packet(&payload[..]);
 
         } else {
             self.message_queue.receive_packet(&packet[PACKET_HEADER_SIZE..]);
@@ -565,12 +565,13 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         }
 
         // Send packet to socket
-        let bytes_sent = if let Some(mut modified) = self.packet_modifier.outgoing(
+        let bytes_sent = if let Some(mut payload) = self.packet_modifier.outgoing(
             &packet[PACKET_HEADER_SIZE..]
         ) {
 
+            // Combine existing header with modified packet payload
             let mut packet = packet[..PACKET_HEADER_SIZE].to_vec();
-            packet.append(&mut modified);
+            packet.append(&mut payload);
 
             socket.send_to(
                 &packet[..], *addr

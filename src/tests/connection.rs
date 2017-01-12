@@ -9,8 +9,8 @@ use std::net;
 use std::thread;
 use std::time::Duration;
 
-use super::mock::{create_connection, create_socket};
-use ::{ConnectionState, ConnectionEvent, Config, MessageKind};
+use super::mock::{create_connection, create_socket, create_socket_with_modifier};
+use ::{ConnectionState, ConnectionEvent, Config, MessageKind, PacketModifier};
 
 #[test]
 fn test_create() {
@@ -641,36 +641,6 @@ fn test_rtt_tick_correction() {
 
 #[test]
 fn test_packet_loss() {
-/*
-    // TODO update tests to use ConnectionEvent
-    use super::super::{Connection, ConnectionEvent};
-    use super::mock::MockOwner;
-
-    struct PacketLossHandler {
-        packet_lost_calls: u32,
-        connection_calls: u32
-    }
-
-    impl Handler<MockOwner> for PacketLossHandler {
-
-        fn connection_packet_lost(
-            &mut self, _: &mut MockOwner, _: &mut Connection, packet: &[u8]
-        ) {
-            self.packet_lost_calls += 1;
-            assert_eq!([
-                0, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 73, 110, 115, 116, 97, 110, 116,
-                1, 0, 0, 15, 80, 97, 99, 107, 101, 116, 32, 82, 101, 108, 105, 97, 98, 108, 101,
-                2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
-            ].to_vec(), packet);
-        }
-
-        fn connection(&mut self, _: &mut MockOwner, conn: &mut Connection) {
-            // Packet loss should have been reset
-            assert_eq!(conn.packet_loss(), 0.0);
-            self.connection_calls += 1;
-        }
-
-    }
 
     let config = Config {
         // set a low threshold for packet loss
@@ -678,18 +648,14 @@ fn test_packet_loss() {
         .. Config::default()
     };
 
-    let (mut conn, mut socket, mut owner, _) = create_socket(Some(config));
-    let mut handler = PacketLossHandler {
-        packet_lost_calls: 0,
-        connection_calls: 0
-    };
+    let (mut conn, mut socket) = create_socket(Some(config));
     let address = conn.peer_addr();
 
     conn.send(MessageKind::Instant, b"Packet Instant".to_vec());
     conn.send(MessageKind::Reliable, b"Packet Reliable".to_vec());
     conn.send(MessageKind::Ordered, b"Packet Ordered".to_vec());
 
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -713,6 +679,9 @@ fn test_packet_loss() {
         ].to_vec())
     ]);
 
+    let events: Vec<ConnectionEvent> = conn.events().collect();
+    assert_eq!(events.len(), 0);
+
     assert_eq!(conn.packet_loss(), 0.0);
 
     // Wait a bit so the packets will definitely get dropped
@@ -725,9 +694,7 @@ fn test_packet_loss() {
         0, 2, 0, 0, // Set ack seq to non-0 so we trigger the packet loss
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
-
-    assert_eq!(handler.connection_calls, 1);
+    ].to_vec(), 0);
 
     // RTT should be left untouched the lost packet
     assert_eq!(conn.rtt(), 0);
@@ -735,12 +702,19 @@ fn test_packet_loss() {
     // But packet loss should spike up
     assert_eq!(conn.packet_loss(), 100.0);
 
-    // Lost handler should have been called once
-    assert_eq!(handler.packet_lost_calls, 1);
+    let events: Vec<ConnectionEvent> = conn.events().collect();
+    assert_eq!(events, vec![
+        ConnectionEvent::Connected,
+        ConnectionEvent::PacketLost(vec![
+            0, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 73, 110, 115, 116, 97, 110, 116,
+            1, 0, 0, 15, 80, 97, 99, 107, 101, 116, 32, 82, 101, 108, 105, 97, 98, 108, 101,
+            2, 0, 0, 14, 80, 97, 99, 107, 101, 116, 32, 79, 114, 100, 101, 114, 101, 100
+        ])
+    ]);
 
     // The messages from the lost packet should have been re-inserted into
     // the message_queue and should be send again with the next packet.
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -768,75 +742,50 @@ fn test_packet_loss() {
         0, 1, 0, 0,
         0, 0
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
     // Packet loss should now go down
     assert_eq!(conn.packet_loss(), 50.0);
-*/
+
+    let events: Vec<ConnectionEvent> = conn.events().collect();
+    assert_eq!(events.len(), 0);
+
 }
 
-#[cfg(feature = "packet_handler_compress")]
 #[test]
-fn test_packet_compression() {
+fn test_packet_modification() {
 
-    // TODO update tests to use packet modifier
-    use super::super::{Handler, Connection};
-    use super::mock::MockOwner;
+    #[derive(Debug, Copy, Clone)]
+    struct TestPacketModifier;
 
-    struct PacketCompressionHandler {
-        packet_compress_calls: u32,
-        packet_decompress_calls: u32
-    }
+    impl PacketModifier for TestPacketModifier {
 
-    impl Handler<MockOwner> for PacketCompressionHandler {
+        fn new(_: Config) -> TestPacketModifier {
+            TestPacketModifier
+        }
 
-        fn connection_packet_compress(
-            &mut self, _: &mut MockOwner, conn: &mut Connection,
-            packet: Vec<u8>, data: &[u8]
-        ) -> Vec<u8> {
+        fn outgoing(&mut self, data: &[u8]) -> Option<Vec<u8>> {
 
-            self.packet_compress_calls += 1;
-
-            // Packet should already contain header
-            assert_eq!([
-                1, 2, 3, 4,
-                (conn.id().0 >> 24) as u8,
-                (conn.id().0 >> 16) as u8,
-                (conn.id().0 >> 8) as u8,
-                 conn.id().0 as u8,
-                0, 0,
-                0, 0, 0, 0
-
-            ].to_vec(), &packet[..]);
-
-            // Expect actual packet data
             assert_eq!([
                 0, 0, 0, 3, 70, 111, 111, // Foo
                 0, 0, 0, 3, 66, 97, 114 // Bar
-            ].to_vec(), &data[..]);
+            ].to_vec(), data);
 
-            // Return a empty compression result
-            packet
+            // Remove messages
+            Some(Vec::new())
+
         }
 
-        fn connection_packet_decompress(
-            &mut self, _: &mut MockOwner, _: &mut Connection, data: &[u8]
-        ) -> Vec<u8> {
-
-            // Packet data should be empty
-            assert_eq!(data.len(), 0);
-
-            self.packet_decompress_calls += 1;
-
+        fn incoming(&mut self, data: &[u8]) -> Option<Vec<u8>> {
             // Inject to messages
-            [
+            Some(vec![
                 0, 0, 0, 3, 70, 111, 111, // Foo
                 0, 0, 0, 3, 66, 97, 114 // Bar
-            ].to_vec()
-
+            ])
         }
 
     }
+
 
     let config = Config {
         // set a low threshold for packet loss
@@ -844,18 +793,13 @@ fn test_packet_compression() {
         .. Config::default()
     };
 
-    let (mut conn, mut socket, mut owner, _) = create_socket(Some(config));
-    let mut handler = PacketCompressionHandler {
-        packet_compress_calls: 0,
-        packet_decompress_calls: 0
-    };
-
+    let (mut conn, mut socket) = create_socket_with_modifier::<TestPacketModifier>(Some(config));
     let address = conn.peer_addr();
 
     // First we send a packet to test compression
     conn.send(MessageKind::Instant, b"Foo".to_vec());
     conn.send(MessageKind::Instant, b"Bar".to_vec());
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
+    conn.send_packet(&mut socket, &address);
     socket.assert_sent(vec![
         ("255.1.1.2:5678", [
             1, 2, 3, 4,
@@ -872,9 +816,6 @@ fn test_packet_compression() {
         ].to_vec())
     ]);
 
-    // Compress handler should have been called once
-    assert_eq!(handler.packet_compress_calls, 1);
-
     // Then receive a packet to test for decompression
     conn.receive_packet([
         1, 2, 3, 4,
@@ -883,92 +824,14 @@ fn test_packet_compression() {
         0, 0
         // Decompression handler will inject the packet data here
 
-    ].to_vec(), 0, &mut owner, &mut handler);
+    ].to_vec(), 0);
 
-    // Decompress handler should have been called once
-    assert_eq!(handler.packet_decompress_calls, 1);
-
-    // Get received messages
-    let mut messages = Vec::new();
-    for msg in conn.received() {
-        messages.push(msg);
-    }
-
-    assert_eq!(messages, vec![
-        b"Foo".to_vec(),
-        b"Bar".to_vec(),
+    let events: Vec<ConnectionEvent> = conn.events().collect();
+    assert_eq!(events, vec![
+        ConnectionEvent::Connected,
+        ConnectionEvent::Message(b"Foo".to_vec()),
+        ConnectionEvent::Message(b"Bar".to_vec())
     ]);
-
-}
-
-#[cfg(feature = "packet_handler_compress")]
-#[test]
-fn test_packet_compression_inflated() {
-
-    // TODO update tests to use packet modifier
-    use std::iter;
-    use super::super::{Handler, Connection};
-    use super::mock::MockOwner;
-
-    struct PacketCompressionHandler {
-        packet_compress_calls: u32
-    }
-
-    impl Handler<MockOwner> for PacketCompressionHandler {
-
-        fn connection_packet_compress(
-            &mut self, _: &mut MockOwner, _: &mut Connection,
-            mut packet: Vec<u8>, data: &[u8]
-        ) -> Vec<u8> {
-
-            self.packet_compress_calls += 1;
-
-            // Expect actual packet data
-            assert_eq!(data.len(), 0);
-
-            let mut buffer: Vec<u8> = iter::repeat(74).take(16).collect();
-            packet.append(&mut buffer);
-
-            // Return a compression result that is bigger than the input
-            packet
-        }
-
-    }
-
-    let config = Config {
-        // set a low threshold for packet loss
-        packet_drop_threshold: 10,
-        .. Config::default()
-    };
-
-    let (mut conn, mut socket, mut owner, _) = create_socket(Some(config));
-    let mut handler = PacketCompressionHandler {
-        packet_compress_calls: 0
-    };
-
-    let address = conn.peer_addr();
-
-    // First we send a packet to test compression
-    conn.send_packet(&mut socket, &address, &mut owner, &mut handler);
-    socket.assert_sent(vec![
-        ("255.1.1.2:5678", [
-            1, 2, 3, 4,
-            (conn.id().0 >> 24) as u8,
-            (conn.id().0 >> 16) as u8,
-            (conn.id().0 >> 8) as u8,
-             conn.id().0 as u8,
-            0,
-            0,
-            0, 0, 0, 0,
-
-            // Compression handler will insert additional packet data here
-            74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74
-
-        ].to_vec())
-    ]);
-
-    // Compress handler should have been called once
-    assert_eq!(handler.packet_compress_calls, 1);
 
 }
 

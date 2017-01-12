@@ -158,9 +158,9 @@ fn test_client_flush_auto_delay() {
 
 }
 
-// TODO test connection success
-
 // TODO test connection failure sleep and expect failure
+
+// TODO test connection success
 
 // TODO test flow with server via two way mock socket
     // TODO test connection(id)
