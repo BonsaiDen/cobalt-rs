@@ -175,6 +175,12 @@ fn test_client_connection_failure() {
     let events = client_events(&mut client);
     assert_eq!(events, vec![ClientEvent::ConnectionFailed]);
 
+    client.flush(false).ok();
+    client.flush(false).ok();
+
+    // We expect no additional packets to be send once the connection failed
+    client.socket().unwrap().assert_sent_none();
+
 }
 
 #[test]
@@ -232,7 +238,7 @@ fn test_client_connection_ignore_non_peer() {
 }
 
 #[test]
-fn test_client_connection_loss() {
+fn test_client_connection_loss_and_reconnect() {
 
     let mut client = client_init(Config {
         connection_drop_threshold: 100,
@@ -259,10 +265,54 @@ fn test_client_connection_loss() {
     // Let the connection time out
     thread::sleep(Duration::from_millis(200));
 
+    // Expect one last packet
+    assert_eq!(client.socket().unwrap().sent_count(), 1);
+
     assert_eq!(client_events(&mut client), vec![ClientEvent::ConnectionLost]);
+
+    client.flush(false).ok();
+    client.flush(false).ok();
+
+    // We expect no additional packets to be send once the connection failed
+    client.socket().unwrap().assert_sent_none();
+
+    // Reset the client connection
+    client.reset().ok();
+
+    // Mock the receival of the first server packet which acknowledges the client
+    let id = client.connection().unwrap().id().0;
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    assert_eq!(client_events(&mut client), vec![ClientEvent::Connection]);
+
+    // Expect one last packet
+    assert_eq!(client.socket().unwrap().sent_count(), 1);
 
 }
 
+// TODO test flow with server via two way mock socket
+    // TODO test connection(id)
+    // TODO test sending
+    // TODO test receiving (and all events)
+    //
+    // TODO test stats
+    // TODO test reset and stats
+    // TODO test close and stats
+
+// TODO test tick delay compensation in its own test file (just extract and re-use the old test code)
+
+// TODO test clean programmtic closure
 
 // Helpers --------------------------------------------------------------------
 fn client_init(config: Config) -> Client<MockSocket, BinaryRateLimiter, NoopPacketModifier> {
@@ -299,17 +349,4 @@ fn client_events(client: &mut Client<MockSocket, BinaryRateLimiter, NoopPacketMo
     }
     events
 }
-
-// TODO test flow with server via two way mock socket
-    // TODO test connection(id)
-    // TODO test sending
-    // TODO test receiving (and all events)
-    //
-    // TODO test stats
-    // TODO test reset and stats
-    // TODO test close and stats
-
-// TODO test reset and re-connect to mock server
-
-// TODO test tick delay compensation in its own test file (just extract and re-use the old test code)
 

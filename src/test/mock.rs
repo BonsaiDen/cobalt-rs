@@ -112,6 +112,10 @@ impl MockSocket {
         }
     }
 
+    pub fn sent_count(&mut self) -> usize {
+        self.sent().len()
+    }
+
     pub fn assert_sent<T: ToSocketAddrs>(&mut self, expected: Vec<(T, Vec<u8>)>) {
         self.assert_sent_sorted(expected, false);
     }
@@ -121,7 +125,6 @@ impl MockSocket {
     }
 
     fn assert_sent_sorted<T: ToSocketAddrs>(&mut self, expected: Vec<(T, Vec<u8>)>, sort_by_addr: bool) {
-
 
         // In some cases we need a reliable assert order so we sort the sent
         // packets by their address

@@ -260,6 +260,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
                         // work in situations were the remote port of a
                         // connection is switched around by NAT.
                         if addr != connection.peer_addr() {
+                            // TODO verify packet sequence
                             connection.set_peer_addr(addr);
                             self.addresses.remove(&id);
                             self.addresses.insert(id, addr);
@@ -270,21 +271,18 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
                         // Then feed the packet into the connection object for
                         // parsing
-                        connection.receive_packet(
-                            packet,
-                            tick_delay / 1000000
-                        );
+                        connection.receive_packet(packet, tick_delay / 1000000);
 
                         // Map connection events
                         for e in connection.events() {
                             self.events.push_back(match e {
                                 ConnectionEvent::Connected => ServerEvent::Connection(id),
-                                ConnectionEvent::Lost | ConnectionEvent::Failed => ServerEvent::ConnectionLost(id),
                                 ConnectionEvent::Closed(p) => ServerEvent::ConnectionClosed(id, p),
                                 ConnectionEvent::Message(payload) => ServerEvent::Message(id, payload),
                                 ConnectionEvent::CongestionStateChanged(c) => ServerEvent::ConnectionCongestionStateChanged(id, c),
-                                ConnectionEvent::PacketLost(payload) => ServerEvent::PacketLost(id, payload)
-                            });
+                                ConnectionEvent::PacketLost(payload) => ServerEvent::PacketLost(id, payload),
+                                _ => unreachable!()
+                            })
                         }
 
                     }
@@ -354,12 +352,15 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
             // Remove any dropped connections and their address mappings
             for id in dropped {
+                self.events.push_back(ServerEvent::ConnectionLost(id));
                 self.connections.remove(&id).unwrap().reset();
                 self.addresses.remove(&id);
             }
 
             self.stats_collector.set_bytes_sent(bytes_sent);
             self.stats_collector.tick();
+            self.stats = self.stats_collector.average();
+
             self.should_receive = true;
 
             if auto_delay {

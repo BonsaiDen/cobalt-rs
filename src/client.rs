@@ -298,9 +298,9 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
 
             self.stats_collector.set_bytes_sent(bytes_sent);
             self.stats_collector.tick();
-            self.should_receive = true;
-
             self.stats = self.stats_collector.average();
+
+            self.should_receive = true;
 
             if auto_delay {
                 tick::end(
