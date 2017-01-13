@@ -216,7 +216,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
 
     }
 
-    /// Receives the next incoming message from the stream's underlying
+    /// Receives the next incoming message from the client's underlying
     /// connection.
     pub fn receive(&mut self) -> Result<ClientEvent, TryRecvError> {
 
@@ -286,7 +286,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
         }
     }
 
-    /// Sends all queued messages over the stream's underlying connection.
+    /// Sends all queued messages over the client's underlying connection.
     pub fn flush(&mut self, auto_delay: bool) -> Result<(), Error> {
         if self.socket.is_some() {
 
@@ -318,8 +318,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
         }
     }
 
-    /// Resets the client, clearing all pending events and resetting the
-    /// underlying connection to the server, returning it into the `Connecting`
+    /// Resets the client, clearing all pending events and dropping any
+    /// connection to the server, returning it into the `Connecting`
     /// state.
     ///
     /// This can be used to re-try a connection attempt if a previous one has
@@ -339,7 +339,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
         }
     }
 
-    /// Closes the stream's underlying connection to the server.
+    /// Drops the client's connection to the server, freeing the socket and
+    /// clearing any state.
     pub fn close(&mut self) -> Result<(), Error> {
         if self.socket.is_some() {
             self.reset().ok();

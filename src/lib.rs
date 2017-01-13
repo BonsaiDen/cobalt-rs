@@ -6,20 +6,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-//! **cobalt** is a networking library which provides [virtual connections
-//! over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/)
-//! for both reliable and unreliable messages with optional in-order delivery.
+//! **cobalt** is low level a networking library which implements [virtual
+//! connections over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/)
+//! supporting both unreliable messaging and reliable messages with optional
+//! in-order delivery.
 //!
-//! It is primarily designed to be used as the basis of real-time, low latency,
-//! single server / multi client systems.
+//! It is designed for use with real-time, low latency situations, for example
+//! action oriented multiplayer games.
 //!
 //! The library provides the underlying architecture required for handling and
 //! maintaining virtual connections over UDP sockets and takes care of sending
 //! raw messages over the established client-server connections with minimal
 //! overhead.
-//!
-//! **cobalt** is also fully configurable and can be integrated in a variety of
-//! ways, as can be seen in the examples below.
 //! ```
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]

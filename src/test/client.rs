@@ -418,18 +418,7 @@ fn test_client_send() {
 
 }
 
-// TODO test flow with server via two way mock socket
-    // TODO test connection(id)
-    // TODO test sending
-    // TODO test receiving (and all events)
-    //
-    // TODO test stats
-    // TODO test reset and stats
-    // TODO test close and stats
-
 // TODO test tick delay compensation in its own test file (just extract and re-use the old test code)
-
-// TODO test clean programmtic closure
 
 // Helpers --------------------------------------------------------------------
 fn client_init(config: Config) -> Client<MockSocket, BinaryRateLimiter, NoopPacketModifier> {

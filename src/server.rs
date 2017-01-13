@@ -203,7 +203,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
     }
 
-    /// Accepts new incoming client connections from the stream's underlying
+    /// Accepts new incoming client connections from the server's underlying
     /// server and receives and returns messages from them.
     pub fn accept_receive(&mut self) -> Result<ServerEvent, TryRecvError> {
 
@@ -322,7 +322,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
         }
     }
 
-    /// Sends all queued messages to the stream's underlying client connections.
+    /// Sends all queued messages to the server's underlying client connections.
     pub fn flush(&mut self, auto_delay: bool) -> Result<(), Error> {
         if self.socket.is_some() {
 
@@ -379,7 +379,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
         }
     }
 
-    /// Shuts down the stream's underlying server, resetting all client connections.
+    /// Shuts down all of the server's client connections, clearing any state
+    /// and freeing the server's socket.
     pub fn shutdown(&mut self) -> Result<(), Error> {
         if self.socket.is_some() {
             self.should_receive = false;
