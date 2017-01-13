@@ -206,6 +206,14 @@ fn test_client_connection_success() {
     ]);
 
     assert_eq!(client_events(&mut client), vec![ClientEvent::Connection]);
+    assert_eq!(client.bytes_sent(), 28);
+    assert_eq!(client.bytes_received(), 0);
+
+    // Flush again to update states
+    client.flush(true).ok();
+
+    assert_eq!(client.bytes_sent(), 42);
+    assert_eq!(client.bytes_received(), 14);
 
 }
 
@@ -261,6 +269,8 @@ fn test_client_connection_loss_and_reconnect() {
     ]);
 
     assert_eq!(client_events(&mut client), vec![ClientEvent::Connection]);
+    assert_eq!(client.bytes_sent(), 28);
+    assert_eq!(client.bytes_received(), 0);
 
     // Let the connection time out
     thread::sleep(Duration::from_millis(200));
@@ -278,6 +288,10 @@ fn test_client_connection_loss_and_reconnect() {
 
     // Reset the client connection
     client.reset().ok();
+
+    // Stats should have been reset
+    assert_eq!(client.bytes_sent(), 0);
+    assert_eq!(client.bytes_received(), 0);
 
     // Mock the receival of the first server packet which acknowledges the client
     let id = client.connection().unwrap().id().0;
@@ -298,6 +312,109 @@ fn test_client_connection_loss_and_reconnect() {
 
     // Expect one last packet
     assert_eq!(client.socket().unwrap().sent_count(), 1);
+    assert_eq!(client.bytes_sent(), 14);
+    assert_eq!(client.bytes_received(), 0);
+
+}
+
+#[test]
+fn test_client_send() {
+
+    let mut client = client_init(Config {
+        connection_drop_threshold: 100,
+        .. Config::default()
+    });
+
+    assert_eq!(client.bytes_sent(), 14);
+
+    // Mock the receival of the first server packet which acknowledges the client
+    let id = client.connection().unwrap().id().0;
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    assert_eq!(client_events(&mut client), vec![ClientEvent::Connection]);
+
+    // States should not be updated before the next flush() call
+    assert_eq!(client.bytes_sent(), 28);
+    assert_eq!(client.bytes_received(), 0);
+    client.flush(false).ok();
+
+    assert_eq!(client.bytes_sent(), 42);
+    assert_eq!(client.bytes_received(), 14);
+
+    // Verify initial connection packets
+    client.socket().unwrap().assert_sent(vec![
+        ("255.1.1.1:5678", [
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            1,
+            0,
+            0, 0, 0, 0
+
+        ].to_vec()),
+        ("255.1.1.1:5678", [
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            2,
+            0,
+            0, 0, 0, 0
+
+        ].to_vec())
+    ]);
+
+    // Send messages to server
+    client.send(MessageKind::Instant, b"Foo".to_vec()).ok();
+    client.send(MessageKind::Reliable, b"Bar".to_vec()).ok();
+
+    // Packets should not be send before the next flush() call
+    client.socket().unwrap().assert_sent_none();
+
+    client.flush(false).ok();
+    client.socket().unwrap().assert_sent(vec![
+        ("255.1.1.1:5678", [
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            3,
+            0,
+            0, 0, 0, 0,
+            0, 0, 0, 3, 70, 111, 111,
+            1, 0, 0, 3, 66, 97, 114
+
+        ].to_vec())
+    ]);
+
+    assert_eq!(client.bytes_sent(), 70);
+
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            1,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111,
+            0, 0, 0, 3, 66, 97, 114
+        ])
+    ]);
+
+    assert_eq!(client_events(&mut client), vec![
+        ClientEvent::Message(b"Foo".to_vec()),
+        ClientEvent::Message(b"Bar".to_vec())
+    ]);
+    assert_eq!(client.bytes_received(), 14);
 
 }
 

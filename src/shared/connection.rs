@@ -121,7 +121,7 @@ pub enum ConnectionEvent {
 /// > for two connections to end up with the same ID, in that case - due to
 /// conflicting ack sequences and message data - both connections will get
 /// dropped shortly.
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Ord, PartialOrd)]
 pub struct ConnectionID(pub u32);
 
 
@@ -176,6 +176,10 @@ pub struct Connection<R: RateLimiter, M: PacketModifier> {
 
     /// Number of all packets sent which were lost
     acked_packets: u32,
+
+    /// Maximum time in milliseconds to wait for a remote response once the
+    /// connection has entered the closing state
+    closing_threshold: u64,
 
     /// The internal message queue of the connection
     message_queue: MessageQueue,
@@ -239,6 +243,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             recv_packets: 0,
             acked_packets: 0,
             lost_packets: 0,
+            closing_threshold: (1000 / config.send_rate) * 5,
             message_queue: MessageQueue::new(config),
             rate_limiter: rate_limiter,
             packet_modifier: packet_modifier,
@@ -348,6 +353,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     /// Overrides the connection's existing configuration.
     pub fn set_config(&mut self, config: Config) {
         self.config = config;
+        self.closing_threshold = (1000 / config.send_rate) * 5;
         self.message_queue.set_config(config);
     }
 
@@ -518,9 +524,6 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
         // Send closing packets if required
         if self.state == ConnectionState::Closing {
-            // TODO send more than just one full packet with this playload
-            // directly over the socket
-            // TODO use reliable transport from message_queue for this?
             packet.extend_from_slice(&CLOSURE_PACKET_DATA);
 
         } else {
@@ -638,7 +641,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
     /// Closes the connection, no further packets will be received or send.
     pub fn close(&mut self) {
-        self.config.connection_drop_threshold = 20;
+        self.config.connection_drop_threshold = self.closing_threshold;
         self.state = ConnectionState::Closing;
     }
 

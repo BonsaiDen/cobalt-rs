@@ -3,18 +3,13 @@ rust:
   - stable
   - beta
 
-env:
-  - FEATURES="all"
-
 matrix:
   allow_failure:
     - rust: nightly
-      env: FEATURES="all lint"
 
   include:
     - rust: nightly
-      env: FEATURES="all lint"
 
 script:
-  - cargo build --features "${FEATURES}" --verbose
-  - cargo test --features "${FEATURES}" --verbose
+  - cargo build --verbose
+  - cargo test --verbose

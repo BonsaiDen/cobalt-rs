@@ -328,6 +328,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
         if self.socket.is_some() {
             self.connection.as_mut().unwrap().reset();
             self.stats_collector.reset();
+            self.stats = self.stats_collector.average();
             self.events.clear();
             self.tick_start = 0;
             self.tick_overflow = 0;

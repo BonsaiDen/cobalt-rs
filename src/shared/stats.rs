@@ -113,6 +113,8 @@ impl StatsCollector {
     /// Resets the internal data used for average calculation, but does not
     /// reset the last calculated averages.
     pub fn reset(&mut self) {
+        self.averages.bytes_sent = 0;
+        self.averages.bytes_received = 0;
         for d in &mut self.buckets {
             d.reset();
         }

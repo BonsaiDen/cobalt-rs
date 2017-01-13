@@ -63,8 +63,23 @@ fn test_close_local() {
 
     ].to_vec())]);
 
-    // Connection should close once the drop threshold is exceeded
+    // Connection should keep sending closure packets until closing threshold is exceeded
     thread::sleep(Duration::from_millis(90));
+
+    conn.send_packet(&mut socket, &address);
+    socket.assert_sent(vec![("255.1.1.2:5678", [
+        1, 2, 3, 4,
+        (conn.id().0 >> 24) as u8,
+        (conn.id().0 >> 16) as u8,
+        (conn.id().0 >> 8) as u8,
+         conn.id().0 as u8,
+
+        0, 128, 85, 85, 85, 85
+
+    ].to_vec())]);
+
+    // Connection should close once the closing threshold is exceeded
+    thread::sleep(Duration::from_millis(100));
     conn.send_packet(&mut socket, &address);
     socket.assert_sent_none();
 

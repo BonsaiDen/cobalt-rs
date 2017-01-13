@@ -180,6 +180,8 @@ fn test_server_connection() {
         ServerEvent::Connection(ConnectionID(151521030))
     ]);
 
+    assert_eq!(server.connections().keys().collect::<Vec<&ConnectionID>>(), vec![&ConnectionID(151521030)]);
+
     // Accept another incoming connection
     server.socket().unwrap().mock_receive(vec![
         ("255.1.1.1:2000", vec![
@@ -194,6 +196,15 @@ fn test_server_connection() {
     assert_eq!(server_events(&mut server), vec![
         ServerEvent::Connection(ConnectionID(67108865))
     ]);
+
+    {
+        let mut keys = server.connections().keys().collect::<Vec<&ConnectionID>>();
+        keys.sort();
+        assert_eq!(keys, vec![
+            &ConnectionID(67108865),
+            &ConnectionID(151521030)
+        ]);
+    }
 
     // Switch the first connection to another peer address
     server.socket().unwrap().mock_receive(vec![
@@ -240,6 +251,9 @@ fn test_server_send() {
     // Send via connection handle
     server.connection(&ConnectionID(151521030)).unwrap().send(MessageKind::Instant, b"Bar".to_vec());
 
+    // Check connections map entries
+    assert_eq!(server.connections().keys().collect::<Vec<&ConnectionID>>(), vec![&ConnectionID(151521030)]);
+
     // Stats should not be updated before flush is called
     assert_eq!(server.bytes_sent(), 0);
     assert_eq!(server.bytes_received(), 0);
@@ -279,6 +293,9 @@ fn test_server_send() {
 
     // Send to new address
     server.send(&ConnectionID(151521030), MessageKind::Instant, b"Baz".to_vec()).ok();
+
+    // Check connections map entries
+    assert_eq!(server.connections().keys().collect::<Vec<&ConnectionID>>(), vec![&ConnectionID(151521030)]);
 
     // Message should be send to the new address of the connection
     server.flush(false).ok();
@@ -323,11 +340,16 @@ fn test_server_connection_loss() {
         ServerEvent::Connection(ConnectionID(151521030))
     ]);
 
+    assert!(server.connection(&ConnectionID(151521030)).is_ok());
+    assert_eq!(server.connections().keys().collect::<Vec<&ConnectionID>>(), vec![&ConnectionID(151521030)]);
+
     // Let the connection attempt time out
     thread::sleep(Duration::from_millis(200));
 
     let events = server_events(&mut server);
     assert_eq!(events, vec![ServerEvent::ConnectionLost(ConnectionID(151521030))]);
+    assert!(server.connection(&ConnectionID(151521030)).is_err());
+    assert_eq!(server.connections().len(), 0);
 
     server.flush(false).ok();
 
@@ -346,9 +368,6 @@ fn test_server_connection_loss() {
     // TODO test connections() and connection(id)
     // TODO test stats
     // TODO test shutdown and stats
-
-// TODO test address re-mapping of client connections
-    // TODO test connections() and connection(id)
 
 // TODO test tick delay compensation in its own test file (just extract and re-use the old test code)
 
