@@ -9,6 +9,17 @@ use ::Config;
 use ::shared::message_queue::{MessageKind, MessageQueue};
 
 #[test]
+fn test_debug_fmt() {
+
+    let mut q = MessageQueue::new(Config::default());
+    q.send(MessageKind::Instant, b"Hello World".to_vec());
+
+    // Check debug fmt support
+    let _ = format!("{:?}", q);
+
+}
+
+#[test]
 fn test_send_write() {
 
     let mut q = MessageQueue::new(Config::default());

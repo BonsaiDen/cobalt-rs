@@ -218,6 +218,62 @@ fn test_client_connection_success() {
 }
 
 #[test]
+fn test_client_reset_events() {
+
+    let mut client = client_init(Config {
+        .. Config::default()
+    });
+
+    let id = client.connection().unwrap().id().0;
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    // Fetch events from the connection
+    client.receive().ok();
+    client.flush(false).ok();
+
+    // Reset events
+    client.reset().ok();
+    assert_eq!(client_events(&mut client), vec![]);
+
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    // Fetch events from the connection
+    client.receive().ok();
+    client.flush(false).ok();
+
+    // Close and clear events
+    client.close().ok();
+
+    // Re-connect to make events accesible again
+    client.connect("255.1.1.1:5678").ok();
+
+    assert_eq!(client_events(&mut client), vec![]);
+
+}
+
+#[test]
 fn test_client_connection_ignore_non_peer() {
 
     let mut client = client_init(Config {
@@ -395,6 +451,60 @@ fn test_client_send() {
 
     assert_eq!(client.bytes_sent(), 70);
 
+}
+
+#[test]
+fn test_client_receive() {
+
+    let mut client = client_init(Config {
+        connection_drop_threshold: 100,
+        .. Config::default()
+    });
+
+    let id = client.connection().unwrap().id().0;
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111,
+            0, 0, 0, 3, 66, 97, 114
+        ])
+    ]);
+
+    assert_eq!(client_events(&mut client), vec![
+        ClientEvent::Connection,
+        ClientEvent::Message(b"Foo".to_vec()),
+        ClientEvent::Message(b"Bar".to_vec())
+    ]);
+
+    // Stats should not be updated before next flush() call
+    assert_eq!(client.bytes_received(), 0);
+
+    client.flush(false).ok();
+    assert_eq!(client.bytes_received(), 28);
+
+    // Ignore duplicates
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111,
+            0, 0, 0, 3, 66, 97, 114
+        ])
+    ]);
+
     client.socket().unwrap().mock_receive(vec![
         ("255.1.1.1:5678", vec![
             1, 2, 3, 4,
@@ -405,20 +515,146 @@ fn test_client_send() {
             1,
             0,
             0, 0, 0, 0,
-            1, 0, 0, 3, 70, 111, 111,
-            0, 0, 0, 3, 66, 97, 114
+            0, 0, 0, 3, 66, 97, 122
         ])
     ]);
 
     assert_eq!(client_events(&mut client), vec![
-        ClientEvent::Message(b"Foo".to_vec()),
-        ClientEvent::Message(b"Bar".to_vec())
+        ClientEvent::Message(b"Baz".to_vec())
     ]);
-    assert_eq!(client.bytes_received(), 14);
 
 }
 
-// TODO test tick delay compensation in its own test file (just extract and re-use the old test code)
+#[test]
+fn test_client_close_by_remote() {
+
+    let mut client = client_init(Config::default());
+    let id = client.connection().unwrap().id().0;
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    assert_eq!(client_events(&mut client), vec![
+        ClientEvent::Connection
+    ]);
+
+    // Receive closure packet
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0, 128, // Most distant sequence numbers
+            85, 85, 85, 85 // ack bitfield with every second bit set
+        ])
+    ]);
+
+    // Expect closure by remote
+    assert_eq!(client_events(&mut client), vec![
+        ClientEvent::ConnectionClosed(true)
+    ]);
+
+}
+
+#[test]
+fn test_client_close_by_local() {
+
+    // TODO support closing the connection locally
+
+    /*
+    let mut client = client_init(Config::default());
+    let id = client.connection().unwrap().id().0;
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    assert_eq!(client_events(&mut client), vec![
+        ClientEvent::Connection
+    ]);
+
+    // TODO Close connection
+    client.
+
+    // Receive closure packet
+    client.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:5678", vec![
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0, 128, // Most distant sequence numbers
+            85, 85, 85, 85 // ack bitfield with every second bit set
+        ])
+    ]);
+
+    // Expect closure by remote
+    assert_eq!(client_events(&mut client), vec![
+        ClientEvent::ConnectionClosed(true)
+    ]);
+    */
+}
+
+#[test]
+fn test_client_auto_delay_with_load() {
+
+    let mut client = Client::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    client.connect("255.1.1.1:5678").ok();
+
+    // Without load
+    let start = clock_ticks::precise_time_ms();
+    for _ in 0..10 {
+        client.receive().ok();
+        client.flush(true).ok();
+    }
+
+    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+
+    // With load
+    let start = clock_ticks::precise_time_ms();
+    for _ in 0..10 {
+        client.receive().ok();
+        thread::sleep(Duration::from_millis(10));
+        client.flush(true).ok();
+    }
+
+    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+
+    // With more load
+    let start = clock_ticks::precise_time_ms();
+    for _ in 0..10 {
+        client.receive().ok();
+        thread::sleep(Duration::from_millis(20));
+        client.flush(true).ok();
+    }
+
+    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+
+}
+
+// TODO test congestion state changes
+// TODO test packet lost events
+
 
 // Helpers --------------------------------------------------------------------
 fn client_init(config: Config) -> Client<MockSocket, BinaryRateLimiter, NoopPacketModifier> {

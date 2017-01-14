@@ -280,7 +280,10 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     /// assert!(conn_id == Some(ConnectionID(16909060)));
     /// ```
     pub fn id_from_packet(config: &Config, packet: &[u8]) -> Option<ConnectionID> {
-        if &packet[0..4] == &config.protocol_header {
+        if packet.len() < 8 {
+            None
+
+        } else if &packet[0..4] == &config.protocol_header {
             Some(ConnectionID(
                 (packet[4] as u32) << 24 | (packet[5] as u32) << 16 |
                 (packet[6] as u32) << 8  |  packet[7] as u32

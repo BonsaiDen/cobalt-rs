@@ -266,24 +266,15 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
                             self.addresses.insert(id, addr);
                         }
 
-                        // Statistics
+                        // Update server statistics
                         bytes_received += packet.len();
 
                         // Then feed the packet into the connection object for
                         // parsing
                         connection.receive_packet(packet, tick_delay / 1000000);
 
-                        // Map connection events
-                        for e in connection.events() {
-                            self.events.push_back(match e {
-                                ConnectionEvent::Connected => ServerEvent::Connection(id),
-                                ConnectionEvent::Closed(p) => ServerEvent::ConnectionClosed(id, p),
-                                ConnectionEvent::Message(payload) => ServerEvent::Message(id, payload),
-                                ConnectionEvent::CongestionStateChanged(c) => ServerEvent::ConnectionCongestionStateChanged(id, c),
-                                ConnectionEvent::PacketLost(payload) => ServerEvent::PacketLost(id, payload),
-                                _ => unreachable!()
-                            })
-                        }
+                        // Map any connection events
+                        map_connection_events(&mut self.events, connection);
 
                     }
 
@@ -323,6 +314,11 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
     }
 
     /// Sends all queued messages to the server's underlying client connections.
+    ///
+    /// If `auto_delay` is specified as `true` this method will block the
+    /// current thread for the amount of time which is required to limit the
+    /// number of calls per second (when called inside a loop) to the server's
+    /// configured `send_rate`.
     pub fn flush(&mut self, auto_delay: bool) -> Result<(), Error> {
         if self.socket.is_some() {
 
@@ -331,20 +327,22 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
             // Create outgoing packets for all connections
             let mut bytes_sent = 0;
-            for (id, conn) in &mut self.connections {
+            for (id, connection) in &mut self.connections {
 
                 // Resolve the last known remote address for this
                 // connection and send the data
                 let addr = &self.addresses[id];
 
                 // Then invoke the connection to send a outgoing packet
-                bytes_sent += conn.send_packet(
+                bytes_sent += connection.send_packet(
                     self.socket.as_mut().unwrap(),
                     addr
                 );
 
                 // Collect all lost / closed connections
-                if !conn.open() {
+                if !connection.open() {
+                    // Map any remaining connection events
+                    map_connection_events(&mut self.events, connection);
                     dropped.push(*id);
                 }
 
@@ -352,7 +350,6 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
             // Remove any dropped connections and their address mappings
             for id in dropped {
-                self.events.push_back(ServerEvent::ConnectionLost(id));
                 self.connections.remove(&id).unwrap().reset();
                 self.addresses.remove(&id);
             }
@@ -384,6 +381,9 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
     pub fn shutdown(&mut self) -> Result<(), Error> {
         if self.socket.is_some() {
             self.should_receive = false;
+            self.stats_collector.reset();
+            self.stats.reset();
+            self.events.clear();
             self.connections.clear();
             self.addresses.clear();
             self.local_address = None;
@@ -395,5 +395,24 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
         }
     }
 
+}
+
+// Helpers --------------------------------------------------------------------
+fn map_connection_events<R: RateLimiter, M: PacketModifier>(
+    server_events: &mut VecDeque<ServerEvent>,
+    connection: &mut Connection<R, M>
+) {
+    let id = connection.id();
+    for event in connection.events() {
+        server_events.push_back(match event {
+            ConnectionEvent::Connected => ServerEvent::Connection(id),
+            ConnectionEvent::Lost => ServerEvent::ConnectionLost(id),
+            ConnectionEvent::Failed => unreachable!(),
+            ConnectionEvent::Closed(p) => ServerEvent::ConnectionClosed(id, p),
+            ConnectionEvent::Message(payload) => ServerEvent::Message(id, payload),
+            ConnectionEvent::CongestionStateChanged(c) => ServerEvent::ConnectionCongestionStateChanged(id, c),
+            ConnectionEvent::PacketLost(payload) => ServerEvent::PacketLost(id, payload)
+        })
+    }
 }
 

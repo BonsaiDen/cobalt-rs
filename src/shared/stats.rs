@@ -23,7 +23,7 @@ pub struct Stats {
 }
 
 impl Stats {
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.bytes_sent = 0;
         self.bytes_received = 0;
     }

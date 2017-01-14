@@ -222,6 +222,46 @@ fn test_server_connection() {
         // got remapped to the new peer address
     ]);
 
+    // Shutdown and drop all connections
+    server.shutdown().ok();
+
+    assert_eq!(server_events(&mut server), vec![]);
+
+    // All connections should have been removed
+    assert!(server.connections().keys().collect::<Vec<&ConnectionID>>().is_empty());
+    assert!(server.connection(&ConnectionID(151521030)).is_err());
+    assert!(server.connection(&ConnectionID(67108865)).is_err());
+
+}
+
+#[test]
+fn test_server_reset_events() {
+
+    let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    server.listen("127.0.0.1:1234").ok();
+
+    // Accept a incoming connection
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    // Fetch events from the connections
+    server.accept_receive().ok();
+    server.flush(false).ok();
+
+    // Shutdown should clear events
+    server.shutdown().ok();
+
+    // Re-bind and make events accesible again
+    server.listen("127.0.0.1:1234").ok();
+    assert!(server_events(&mut server).is_empty());
+
 }
 
 #[test]
@@ -244,6 +284,8 @@ fn test_server_send() {
     assert_eq!(server_events(&mut server), vec![
         ServerEvent::Connection(ConnectionID(151521030))
     ]);
+
+    assert!(server.connection(&ConnectionID(1)).is_err());
 
     // Send via server
     server.send(&ConnectionID(151521030), MessageKind::Instant, b"Foo".to_vec()).ok();
@@ -314,6 +356,193 @@ fn test_server_send() {
     assert_eq!(server.bytes_sent(), 49);
     assert_eq!(server.bytes_received(), 28);
 
+    // Shutdown and reset stats
+    server.shutdown().ok();
+    assert_eq!(server.bytes_sent(), 0);
+    assert_eq!(server.bytes_received(), 0);
+
+}
+
+#[test]
+fn test_server_receive() {
+
+    let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    server.listen("127.0.0.1:1234").ok();
+
+    // Accept incoming connections
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0,
+            0, 0, 0, 3, 66, 97, 122
+        ]),
+        ("255.1.1.2:2000", vec![
+            1, 2, 3, 4,
+            5, 5, 1, 1,
+            0,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111
+        ])
+    ]);
+
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0,
+            0, 0, 0, 3, 66, 97, 122
+        ]),
+        ("255.1.1.2:2000", vec![
+            1, 2, 3, 4,
+            5, 5, 1, 1,
+            0,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111
+        ])
+    ]);
+
+    assert_eq!(server_events(&mut server), vec![
+        ServerEvent::Connection(ConnectionID(151521030)),
+        ServerEvent::Message(ConnectionID(151521030), b"Baz".to_vec()),
+        ServerEvent::Connection(ConnectionID(84214017)),
+        ServerEvent::Message(ConnectionID(84214017), b"Foo".to_vec())
+    ]);
+
+    // Should ignore duplicates
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0,
+            0, 0, 0, 3, 66, 97, 122
+        ]),
+        ("255.1.1.2:2000", vec![
+            1, 2, 3, 4,
+            5, 5, 1, 1,
+            0,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111
+        ])
+    ]);
+
+    assert!(server_events(&mut server).is_empty());
+
+    // Receive additional messages
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            1,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111
+        ]),
+        ("255.1.1.2:2000", vec![
+            1, 2, 3, 4,
+            5, 5, 1, 1,
+            1,
+            0,
+            0, 0, 0, 0,
+            0, 0, 0, 3, 66, 97, 122
+        ])
+    ]);
+
+    assert_eq!(server_events(&mut server), vec![
+        ServerEvent::Message(ConnectionID(151521030), b"Foo".to_vec()),
+        ServerEvent::Message(ConnectionID(84214017), b"Baz".to_vec())
+    ]);
+
+}
+
+#[test]
+fn test_server_connection_close() {
+
+    let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    server.listen("127.0.0.1:1234").ok();
+
+    // Accept incoming connections
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0
+        ]),
+        ("255.1.1.2:2000", vec![
+            1, 2, 3, 4,
+            5, 5, 1, 1,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0,
+            0, 0, 0, 3, 66, 97, 122
+        ]),
+        ("255.1.1.2:2000", vec![
+            1, 2, 3, 4,
+            5, 5, 1, 1,
+            0,
+            0,
+            0, 0, 0, 0,
+            1, 0, 0, 3, 70, 111, 111
+        ])
+    ]);
+
+    assert_eq!(server_events(&mut server), vec![
+        ServerEvent::Connection(ConnectionID(151521030)),
+        ServerEvent::Connection(ConnectionID(84214017)),
+    ]);
+
+    // Receive closure packet
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0, 128, // Most distant sequence numbers
+            85, 85, 85, 85 // ack bitfield with every second bit set
+        ])
+    ]);
+
+    // Expect closure by remote
+    assert_eq!(server_events(&mut server), vec![
+        ServerEvent::ConnectionClosed(ConnectionID(151521030), true)
+    ]);
+
+    // Connection should be removed after next flush call
+    server.flush(false).ok();
+    assert!(server.connection(&ConnectionID(151521030)).is_err());
+
+    // Close via connection handle
+    server.connection(&ConnectionID(84214017)).unwrap().close();
+
+    // Connection should still be there during closing threshold
+    assert_eq!(server_events(&mut server), vec![]);
+
+    // Expect connection to be dropped after closing threshold
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(server_events(&mut server), vec![
+        ServerEvent::ConnectionClosed(ConnectionID(84214017), false)
+    ]);
+
 }
 
 #[test]
@@ -358,19 +587,48 @@ fn test_server_connection_loss() {
 
 }
 
-// TODO test flow with client via two way mock socket
-    // TODO test packet destination check
-    // TODO test connections() and connection(id)
-    // TODO test stats
-    // TODO test shutdown and stats
+#[test]
+fn test_server_auto_delay_with_load() {
 
-// TODO test flow with multiple clients via two way mock socket :)
-    // TODO test connections() and connection(id)
-    // TODO test stats
-    // TODO test shutdown and stats
+    let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    server.listen("127.0.0.1:1234").ok();
 
-// TODO test tick delay compensation in its own test file (just extract and re-use the old test code)
+    // Without load
+    let start = clock_ticks::precise_time_ms();
+    for _ in 0..10 {
+        server.accept_receive().ok();
+        server.flush(true).ok();
+    }
 
+    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+
+    // With load
+    let start = clock_ticks::precise_time_ms();
+    for _ in 0..10 {
+        server.accept_receive().ok();
+        thread::sleep(Duration::from_millis(10));
+        server.flush(true).ok();
+    }
+
+    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+
+    // With more load
+    let start = clock_ticks::precise_time_ms();
+    for _ in 0..10 {
+        server.accept_receive().ok();
+        thread::sleep(Duration::from_millis(20));
+        server.flush(true).ok();
+    }
+
+    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+
+}
+
+// TODO test congestion state changes
+// TODO test packet lost events
+
+
+// Helpers --------------------------------------------------------------------
 fn server_events(server: &mut Server<MockSocket, BinaryRateLimiter, NoopPacketModifier>) -> Vec<ServerEvent> {
     server.flush(false).ok();
     let mut events = Vec::new();

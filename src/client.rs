@@ -287,6 +287,11 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
     }
 
     /// Sends all queued messages over the client's underlying connection.
+    ///
+    /// If `auto_delay` is specified as `true` this method will block the
+    /// current thread for the amount of time which is required to limit the
+    /// number of calls per second (when called inside a loop) to the client's
+    /// configured `send_rate`.
     pub fn flush(&mut self, auto_delay: bool) -> Result<(), Error> {
         if self.socket.is_some() {
 
@@ -328,7 +333,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
         if self.socket.is_some() {
             self.connection.as_mut().unwrap().reset();
             self.stats_collector.reset();
-            self.stats = self.stats_collector.average();
+            self.stats.reset();
             self.events.clear();
             self.tick_start = 0;
             self.tick_overflow = 0;

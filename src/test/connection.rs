@@ -10,7 +10,10 @@ use std::thread;
 use std::time::Duration;
 
 use super::mock::{create_connection, create_socket, create_socket_with_modifier};
-use ::{ConnectionState, ConnectionEvent, Config, MessageKind, PacketModifier};
+use ::{
+    Connection, ConnectionID, ConnectionState, ConnectionEvent,
+    Config, MessageKind, PacketModifier, BinaryRateLimiter, NoopPacketModifier
+};
 
 #[test]
 fn test_create() {
@@ -25,6 +28,10 @@ fn test_create() {
     assert_eq!(conn.local_addr(), local_address);
     assert_eq!(conn.peer_addr(), peer_address);
     assert_eq!(conn.events().len(), 0);
+
+    // Check debug fmt support
+    let _ = format!("{:?}", conn);
+
 }
 
 #[test]
@@ -92,6 +99,44 @@ fn test_close_local() {
 }
 
 #[test]
+fn test_id_from_packet() {
+
+    let config = Config {
+        protocol_header: [1, 3, 3, 7],
+        .. Config::default()
+    };
+
+    // Extract ID from matching protocol header
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[1, 3, 3, 7, 1, 2, 3, 4]
+
+    ), Some(ConnectionID(16909060)));
+
+    // Ignore ID from non-matching protocol header
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[9, 0, 0, 0, 1, 2, 3, 4]
+
+    ), None);
+
+    // Ignore packet data with len < 8
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[9, 0, 0, 0, 1, 2, 3]
+
+    ), None);
+
+    // Ignore packet data with len < 4
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[9, 0, 0]
+
+    ), None);
+
+}
+
+#[test]
 fn test_close_remote() {
 
     let mut conn = create_connection(None);
@@ -139,6 +184,17 @@ fn test_connecting_failed() {
 
     let events: Vec<ConnectionEvent> = conn.events().collect();
     assert_eq!(events, vec![ConnectionEvent::Failed]);
+
+    // Ignore any further packets
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0,
+        0, 128, 85, 85, 85, 85 // closure packet data
+
+    ].to_vec(), 0);
+
+    let events: Vec<ConnectionEvent> = conn.events().collect();
+    assert_eq!(events, vec![]);
 
 }
 
