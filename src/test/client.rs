@@ -5,12 +5,10 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
-
 
 // STD Dependencies -----------------------------------------------------------
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::io::ErrorKind;
 use std::sync::mpsc::TryRecvError;
 
@@ -24,14 +22,17 @@ use ::{
 
 
 // Macros ---------------------------------------------------------------------
-macro_rules! assert_epsilon {
-    ($value:expr, $target:expr, $difference:expr) => {
+macro_rules! assert_millis_since {
+    ($start:expr, $target:expr, $difference:expr) => {
         {
-            let actual = ($value) as i64;
+            let duration = $start.elapsed();
+            let millis = (duration.subsec_nanos() / 1000000) as u64;
+
+            let actual = (duration.as_secs() * 1000 + millis) as i64;
             let min = $target - $difference;
             let max = $target + $difference;
             if actual < min || actual > max {
-                panic!(format!("Value {} not in range {} - {}", $value, min, max));
+                panic!(format!("Value {} not in range {} - {}", actual, min, max));
             }
         }
     }
@@ -137,12 +138,12 @@ fn test_client_flush_without_delay() {
     let mut client = Client::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
     client.connect("255.1.1.1:5678").ok();
 
-    let start = clock_ticks::precise_time_ms();
+    let start = Instant::now();
     for _ in 0..5 {
         client.receive().ok();
         client.flush(false).ok();
     }
-    assert_epsilon!(clock_ticks::precise_time_ms() - start, 0, 16);
+    assert_millis_since!(start, 0, 16);
 
 }
 
@@ -152,12 +153,12 @@ fn test_client_flush_auto_delay() {
     let mut client = Client::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
     client.connect("255.1.1.1:5678").ok();
 
-    let start = clock_ticks::precise_time_ms();
+    let start = Instant::now();
     for _ in 0..5 {
         client.receive().ok();
         client.flush(true).ok();
     }
-    assert_epsilon!(clock_ticks::precise_time_ms() - start, 167, 33);
+    assert_millis_since!(start, 167, 33);
 
 }
 
@@ -622,33 +623,33 @@ fn test_client_auto_delay_with_load() {
     client.connect("255.1.1.1:5678").ok();
 
     // Without load
-    let start = clock_ticks::precise_time_ms();
+    let start = Instant::now();
     for _ in 0..10 {
         client.receive().ok();
         client.flush(true).ok();
     }
 
-    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+    assert_millis_since!(start, 330, 16);
 
     // With load
-    let start = clock_ticks::precise_time_ms();
+    let start = Instant::now();
     for _ in 0..10 {
         client.receive().ok();
         thread::sleep(Duration::from_millis(10));
         client.flush(true).ok();
     }
 
-    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+    assert_millis_since!(start, 330, 16);
 
     // With more load
-    let start = clock_ticks::precise_time_ms();
+    let start = Instant::now();
     for _ in 0..10 {
         client.receive().ok();
         thread::sleep(Duration::from_millis(20));
         client.flush(true).ok();
     }
 
-    assert_epsilon!(clock_ticks::precise_time_ms() - start, 330, 16);
+    assert_millis_since!(start, 330, 16);
 
 }
 
