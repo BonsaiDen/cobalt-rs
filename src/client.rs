@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 
 // Internal Dependencies ------------------------------------------------------
 use shared::stats::{Stats, StatsCollector};
-use shared::tick;
+use shared::ticker::Ticker;
 use super::{
     Config,
     Connection, ConnectionEvent,
@@ -92,8 +92,7 @@ pub struct Client<S: Socket, R: RateLimiter, M: PacketModifier> {
     config: Config,
     socket: Option<S>,
     connection: Option<Connection<R, M>>,
-    tick_start: u64,
-    tick_overflow: u64,
+    ticker: Ticker,
     peer_address: Option<SocketAddr>,
     local_address: Option<SocketAddr>,
     events: VecDeque<ClientEvent>,
@@ -110,8 +109,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
             config: config,
             socket: None,
             connection: None,
-            tick_start: 0,
-            tick_overflow: 0,
+            ticker: Ticker::new(config),
             peer_address: None,
             local_address: None,
             events: VecDeque::new(),
@@ -173,6 +171,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
     pub fn set_config(&mut self, config: Config) {
 
         self.config = config;
+        self.ticker.set_config(config);
         self.stats_collector.set_config(config);
 
         if let Some(connection) = self.connection.as_mut() {
@@ -227,9 +226,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
 
             if self.should_receive {
 
-                self.tick_start = tick::start();
+                self.ticker.begin_tick();
 
-                let tick_delay = 1000000000 / self.config.send_rate;
                 let peer_address = self.peer_address.unwrap();
 
                 // Receive all incoming UDP packets to our local address
@@ -237,10 +235,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
                 while let Ok((addr, packet)) = self.socket.as_mut().unwrap().try_recv() {
                     if addr == peer_address {
                         bytes_received += packet.len();
-                        self.connection.as_mut().unwrap().receive_packet(
-                            packet,
-                            tick_delay / 1000000
-                        );
+                        self.connection.as_mut().unwrap().receive_packet(packet);
                     }
                 }
 
@@ -308,12 +303,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
             self.should_receive = true;
 
             if auto_delay {
-                tick::end(
-                    1000000000 / self.config.send_rate,
-                    self.tick_start,
-                    &mut self.tick_overflow,
-                    &self.config
-                );
+                self.ticker.end_tick();
             }
 
             Ok(())
@@ -335,8 +325,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
             self.stats_collector.reset();
             self.stats.reset();
             self.events.clear();
-            self.tick_start = 0;
-            self.tick_overflow = 0;
+            self.ticker.reset();
             Ok(())
 
         } else {

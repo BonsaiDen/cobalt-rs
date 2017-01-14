@@ -150,7 +150,7 @@ fn test_close_remote() {
         0, // remote sequence number we confirm
         0, 0, 0, 0 // bitfield
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     assert!(conn.state() == ConnectionState::Connected);
 
@@ -163,7 +163,7 @@ fn test_close_remote() {
         0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
         0, 128, 85, 85, 85, 85 // closure packet data
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     assert_eq!(conn.open(), false);
     assert!(conn.state() == ConnectionState::Closed);
@@ -191,7 +191,7 @@ fn test_connecting_failed() {
         0, 0, 0, 0,
         0, 128, 85, 85, 85, 85 // closure packet data
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     let events: Vec<ConnectionEvent> = conn.events().collect();
     assert_eq!(events, vec![]);
@@ -321,7 +321,7 @@ fn test_send_and_receive_packet() {
         2, // remote sequence number we confirm
         0, 0, 0, 3, // confirm the first two packets
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     let events: Vec<ConnectionEvent> = conn.events().collect();
     assert_eq!(events, vec![ConnectionEvent::Connected]);
@@ -334,7 +334,7 @@ fn test_send_and_receive_packet() {
         3, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     conn.receive_packet([
         1, 2, 3, 4,
@@ -343,7 +343,7 @@ fn test_send_and_receive_packet() {
         4, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     conn.receive_packet([
         1, 2, 3, 4,
@@ -352,7 +352,7 @@ fn test_send_and_receive_packet() {
         4, // remote sequence number we confirm
         0, 0, 0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Test Receive Ack Bitfield
     conn.send_packet(&mut socket, &address);
@@ -444,7 +444,7 @@ fn test_send_and_receive_messages() {
         // Hello
         2, 0, 0, 5, 72, 101, 108, 108, 111
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Get received messages
     let messages: Vec<ConnectionEvent> = conn.events().collect();
@@ -469,7 +469,7 @@ fn test_send_and_receive_messages() {
         // Foo
         0, 0, 0, 3, 70, 111, 111
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // send_packet should dismiss any received messages which have not been fetched
     conn.send_packet(&mut socket, &address);
@@ -498,13 +498,13 @@ fn test_receive_invalid_packets() {
     let mut conn = create_connection(None);
 
     // Empty packet
-    conn.receive_packet([].to_vec(), 0);
+    conn.receive_packet([].to_vec());
 
     // Garbage packet
     conn.receive_packet([
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
 
-    ].to_vec(), 0);
+    ].to_vec());
 
 }
 
@@ -540,7 +540,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Expect RTT value to have moved by 10% of the overall roundtrip time
     assert!(conn.rtt() >= 40);
@@ -567,7 +567,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Third packet
     conn.send_packet(&mut socket, &address);
@@ -591,7 +591,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Fourth packet
     conn.send_packet(&mut socket, &address);
@@ -615,7 +615,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Fifth packet
     conn.send_packet(&mut socket, &address);
@@ -639,7 +639,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Sixth packet
     conn.send_packet(&mut socket, &address);
@@ -664,7 +664,7 @@ fn test_rtt() {
         0, 0,
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Expect RTT to have reduced by 10%
     assert!(conn.rtt() <= 40);
@@ -703,10 +703,10 @@ fn test_rtt_tick_correction() {
         0, 0,
         0, 0
 
-    ].to_vec(), 500);
+    ].to_vec());
 
-    // Expect RTT value to have been corrected by passed in tick delay
-    assert!(conn.rtt() <= 10);
+    // Expect RTT value to have been reduced after normal tick
+    assert!(conn.rtt() <= 55);
 
 }
 
@@ -765,7 +765,7 @@ fn test_packet_loss() {
         0, 2, 0, 0, // Set ack seq to non-0 so we trigger the packet loss
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // RTT should be left untouched the lost packet
     assert_eq!(conn.rtt(), 0);
@@ -813,7 +813,7 @@ fn test_packet_loss() {
         0, 1, 0, 0,
         0, 0
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     // Packet loss should now go down
     assert_eq!(conn.packet_loss(), 50.0);
@@ -897,7 +897,7 @@ fn test_packet_modification() {
         0, 0,
         1, 2, 3, 4, 128, 96, 7
 
-    ].to_vec(), 0);
+    ].to_vec());
 
     let events: Vec<ConnectionEvent> = conn.events().collect();
     assert_eq!(events, vec![

@@ -15,7 +15,7 @@ use std::collections::{HashMap, VecDeque};
 
 // Internal Dependencies ------------------------------------------------------
 use shared::stats::{Stats, StatsCollector};
-use shared::tick;
+use shared::ticker::Ticker;
 use super::{
     Config,
     ConnectionID, Connection, ConnectionEvent,
@@ -93,8 +93,7 @@ pub struct Server<S: Socket, R: RateLimiter, M: PacketModifier> {
     socket: Option<S>,
     connections: HashMap<ConnectionID, Connection<R, M>>,
     addresses: HashMap<ConnectionID, SocketAddr>,
-    tick_start: u64,
-    tick_overflow: u64,
+    ticker: Ticker,
     local_address: Option<SocketAddr>,
     events: VecDeque<ServerEvent>,
     should_receive: bool,
@@ -111,8 +110,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
             socket: None,
             connections: HashMap::new(),
             addresses: HashMap::new(),
-            tick_start: 0,
-            tick_overflow: 0,
+            ticker: Ticker::new(config),
             local_address: None,
             events: VecDeque::new(),
             should_receive: false,
@@ -176,8 +174,15 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
     /// Overrides the server's current configuration.
     pub fn set_config(&mut self, config: Config) {
+
         self.config = config;
+        self.ticker.set_config(config);
         self.stats_collector.set_config(config);
+
+        for (_, conn) in &mut self.connections {
+            conn.set_config(config);
+        }
+
     }
 
     /// Binds the server to listen the specified address.
@@ -214,13 +219,9 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
             if self.should_receive {
 
-                self.tick_start = tick::start();
+                self.ticker.begin_tick();
 
-                let tick_delay = 1000000000 / self.config.send_rate;
                 let local_address = self.local_address.unwrap();
-
-                // TODO optimize unnecessary copying
-                let config = self.config;
 
                 // Receive all incoming UDP packets to our local address
                 let mut bytes_received = 0;
@@ -228,6 +229,9 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
                     // Try to extract the connection id from the packet
                     if let Some(id) = Connection::<R, M>::id_from_packet(&self.config, &packet) {
+
+                        // TODO optimize unnecessary copying
+                        let config = self.config;
 
                         // Retrieve or create a connection for the current
                         // connection id
@@ -260,7 +264,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
                         // work in situations were the remote port of a
                         // connection is switched around by NAT.
                         if addr != connection.peer_addr() {
-                            // TODO verify packet sequence
+                            // TODO verify packet sequence, only newer packets should be allowed up
+                            // update the peer address
                             connection.set_peer_addr(addr);
                             self.addresses.remove(&id);
                             self.addresses.insert(id, addr);
@@ -271,7 +276,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
                         // Then feed the packet into the connection object for
                         // parsing
-                        connection.receive_packet(packet, tick_delay / 1000000);
+                        connection.receive_packet(packet);
 
                         // Map any connection events
                         map_connection_events(&mut self.events, connection);
@@ -361,12 +366,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
             self.should_receive = true;
 
             if auto_delay {
-                tick::end(
-                    1000000000 / self.config.send_rate,
-                    self.tick_start,
-                    &mut self.tick_overflow,
-                    &self.config
-                );
+                self.ticker.end_tick();
             }
 
             Ok(())
@@ -386,6 +386,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
             self.events.clear();
             self.connections.clear();
             self.addresses.clear();
+            self.ticker.reset();
             self.local_address = None;
             self.socket = None;
             Ok(())

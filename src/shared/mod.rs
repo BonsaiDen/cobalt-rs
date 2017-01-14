@@ -6,7 +6,7 @@ pub mod message_queue;
 mod noop_packet_modifier;
 mod udp_socket;
 pub mod stats;
-pub mod tick;
+pub mod ticker;
 
 
 // Re-Exports -----------------------------------------------------------------

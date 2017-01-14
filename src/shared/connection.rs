@@ -383,7 +383,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     }
 
     /// Receives a incoming UDP packet.
-    pub fn receive_packet(&mut self, packet: Vec<u8>, tick_delay: u64) {
+    pub fn receive_packet(&mut self, packet: Vec<u8>) {
 
         // Ignore any packets shorter then the header length
         if packet.len() < PACKET_HEADER_SIZE {
@@ -419,6 +419,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
                 // Calculate the roundtrip time from acknowledged packets
                 if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
+                    let tick_delay = (1000000000 / self.config.send_rate) / 1000000;
                     self.acked_packets = self.acked_packets.wrapping_add(1);
                     self.smoothed_rtt = moving_average(
                         self.smoothed_rtt,
