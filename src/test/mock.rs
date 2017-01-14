@@ -17,7 +17,7 @@ use std::sync::mpsc::TryRecvError;
 // Internal Dependencies ------------------------------------------------------
 use super::super::{
     BinaryRateLimiter, NoopPacketModifier,
-    Config, Connection, ConnectionEvent,
+    Config, Connection,
     Socket, RateLimiter, PacketModifier
 };
 
@@ -120,10 +120,6 @@ impl MockSocket {
         self.assert_sent_sorted(expected, false);
     }
 
-    pub fn assert_sent_sort_by_addr<T: ToSocketAddrs>(&mut self, expected: Vec<(T, Vec<u8>)>) {
-        self.assert_sent_sorted(expected, true);
-    }
-
     fn assert_sent_sorted<T: ToSocketAddrs>(&mut self, expected: Vec<(T, Vec<u8>)>, sort_by_addr: bool) {
 
         // In some cases we need a reliable assert order so we sort the sent
@@ -185,22 +181,6 @@ impl MockSocket {
 
 
 // Helpers --------------------------------------------------------------------
-fn check_server_messages(conn: &mut Connection<BinaryRateLimiter, NoopPacketModifier>) {
-
-    let mut messages = Vec::new();
-    for m in conn.events() {
-        if let ConnectionEvent::Message(m) = m {
-            messages.push(m);
-        }
-    }
-
-    assert_eq!(messages, [
-        [72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100].to_vec()
-
-    ].to_vec())
-
-}
-
 fn to_socket_addr<T: ToSocketAddrs>(address: T) -> SocketAddr {
     address.to_socket_addrs().unwrap().nth(0).unwrap()
 }

@@ -177,3 +177,80 @@ fn nanos_from_duration(d: Duration) -> u64 {
     d.as_secs() * 1000 * 1000000 + d.subsec_nanos() as u64
 }
 
+#[cfg(test)]
+mod test {
+
+    use std::thread;
+    use std::time::Duration;
+
+    use ::{Config, RateLimiter};
+    use super::BinaryRateLimiter;
+
+    #[test]
+    fn test_modes() {
+
+        let mut rl = BinaryRateLimiter::new(Config::default());
+
+        // Default to good mode
+        assert_eq!(rl.congested(), false);
+        assert_eq!(rl.should_send(), true);
+
+        // Update with values that continue good mode
+        rl.update(51, 0.0);
+        assert_eq!(rl.congested(), false);
+        assert_eq!(rl.should_send(), true);
+
+        rl.update(151, 0.0);
+        assert_eq!(rl.congested(), false);
+        assert_eq!(rl.should_send(), true);
+
+        rl.update(250, 0.0);
+        assert_eq!(rl.congested(), false);
+        assert_eq!(rl.should_send(), true);
+
+        // Update with values that will trigger bad mode
+        rl.update(251, 0.0);
+
+        // Should now be in bad mode
+        assert_eq!(rl.congested(), true);
+
+        // Should not send for the next two update calls
+        assert_eq!(rl.should_send(), false);
+        rl.update(251, 0.0);
+        assert_eq!(rl.should_send(), false);
+        rl.update(251, 0.0);
+
+        // Every third tick should send while in bad mode
+        assert_eq!(rl.should_send(), true);
+
+        // Sleep until the limiter will transition back into good mode
+        thread::sleep(Duration::from_millis(1100));
+        rl.update(12, 0.0);
+        assert_eq!(rl.congested(), false);
+        assert_eq!(rl.should_send(), true);
+
+    }
+
+    #[test]
+    fn test_reset() {
+
+        let mut rl = BinaryRateLimiter::new(Config::default());
+
+        // Default to good mode
+        assert_eq!(rl.congested(), false);
+        assert_eq!(rl.should_send(), true);
+
+        // Update with values that will trigger bad mode
+        rl.update(251, 0.0);
+        assert_eq!(rl.congested(), true);
+        assert_eq!(rl.should_send(), false);
+
+        // Reset should put the limiter back into good mode
+        rl.reset();
+        assert_eq!(rl.congested(), false);
+        assert_eq!(rl.should_send(), true);
+
+    }
+
+}
+
