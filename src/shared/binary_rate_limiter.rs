@@ -5,20 +5,20 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
 
 // STD Dependencies -----------------------------------------------------------
 use std::cmp;
+use std::time::{Duration, Instant};
 
 
 // Internal Dependencies ------------------------------------------------------
 use ::{Config, RateLimiter};
 
 /// Minimum time before switching back into good mode in milliseconds.
-const MIN_GOOD_MODE_TIME_DELAY: u32 = 1000;
+const MIN_GOOD_MODE_TIME_DELAY: u64 = 1000;
 
 /// Maximum time before switching back into good mode in milliseconds.
-const MAX_GOOD_MODE_TIME_DELAY: u32 = 60000;
+const MAX_GOOD_MODE_TIME_DELAY: u64 = 60000;
 
 #[derive(Debug, PartialEq)]
 enum Mode {
@@ -36,10 +36,10 @@ pub struct BinaryRateLimiter {
     max_tick: u32,
     mode: Mode,
     rtt_threshold: u32,
-    last_bad_time: u32,
-    last_good_time: u32,
-    good_time_duration: u32,
-    delay_until_good_mode: u32
+    last_bad_time: Instant,
+    last_good_time: Instant,
+    good_time_duration: u64,
+    delay_until_good_mode: u64
 }
 
 impl RateLimiter for BinaryRateLimiter {
@@ -54,8 +54,8 @@ impl RateLimiter for BinaryRateLimiter {
             max_tick: (rate / (33.0 / (100.0 / rate))) as u32,
             mode: Mode::Good,
             rtt_threshold: 250,
-            last_bad_time: 0,
-            last_good_time: precise_time_ms(),
+            last_bad_time: Instant::now(),
+            last_good_time: Instant::now(),
             good_time_duration: 0,
             delay_until_good_mode: MIN_GOOD_MODE_TIME_DELAY
         }
@@ -67,13 +67,13 @@ impl RateLimiter for BinaryRateLimiter {
         // Check current network conditions
         let conditions = if rtt <= self.rtt_threshold {
             // Keep track of the time we are in good mode
-            self.good_time_duration += precise_time_ms() - self.last_good_time;
-            self.last_good_time = precise_time_ms();
+            self.good_time_duration += time_since(&self.last_good_time);
+            self.last_good_time = Instant::now();
             Mode::Good
 
         } else {
             // Remember the last time we were in bad mode
-            self.last_bad_time = precise_time_ms();
+            self.last_bad_time = Instant::now();
             self.good_time_duration = 0;
             Mode::Bad
         };
@@ -90,7 +90,7 @@ impl RateLimiter for BinaryRateLimiter {
 
                     // To avoid rapid toggling between good and bad mode, if we
                     // drop from good mode to bad in under 10 seconds
-                    if time_since(self.last_bad_time) < 10000 {
+                    if time_since(&self.last_bad_time) < 10000 {
 
                         // We double the amount of time before bad mode goes
                         // back to good.
@@ -131,7 +131,7 @@ impl RateLimiter for BinaryRateLimiter {
 
                 // If you are in bad mode, and conditions have been good for a
                 // specific length of time return to good mode
-                if time_since(self.last_bad_time) > self.delay_until_good_mode {
+                if time_since(&self.last_bad_time) > self.delay_until_good_mode {
                     self.mode = Mode::Good;
                 }
 
@@ -153,26 +153,27 @@ impl RateLimiter for BinaryRateLimiter {
     }
 
     fn should_send(&self ) -> bool {
-        // Send all packets when in good mode and about a third when in bad mode
+        // Send all packets when in good mode and about only a third when in
+        // bad mode
         !self.congested() || self.tick == 0
     }
 
     fn reset(&mut self) {
         self.tick = 0;
         self.mode = Mode::Good;
-        self.last_bad_time = 0;
-        self.last_good_time = precise_time_ms();
+        self.last_bad_time = Instant::now();;
+        self.last_good_time = Instant::now();
         self.good_time_duration = 0;
         self.delay_until_good_mode = MIN_GOOD_MODE_TIME_DELAY;
     }
 
 }
 
-fn precise_time_ms() -> u32 {
-    (clock_ticks::precise_time_ns() / 1000000) as u32
+fn time_since(i: &Instant) -> u64 {
+    nanos_from_duration(i.elapsed())
 }
 
-fn time_since(t: u32) -> u32 {
-    precise_time_ms() - t
+fn nanos_from_duration(d: Duration) -> u64 {
+    d.as_secs() * 1000 * 1000000 + d.subsec_nanos() as u64
 }
 

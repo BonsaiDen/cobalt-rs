@@ -166,7 +166,7 @@ fn test_client_flush_auto_delay() {
 fn test_client_connection_failure() {
 
     let mut client = client_init(Config {
-        connection_init_threshold: 100,
+        connection_init_threshold: Duration::from_millis(100),
         .. Config::default()
     });
 
@@ -278,7 +278,7 @@ fn test_client_reset_events() {
 fn test_client_connection_ignore_non_peer() {
 
     let mut client = client_init(Config {
-        connection_init_threshold: 100,
+        connection_init_threshold: Duration::from_millis(100),
         .. Config::default()
     });
 
@@ -306,7 +306,7 @@ fn test_client_connection_ignore_non_peer() {
 fn test_client_connection_loss_and_reconnect() {
 
     let mut client = client_init(Config {
-        connection_drop_threshold: 100,
+        connection_drop_threshold: Duration::from_millis(100),
         .. Config::default()
     });
 
@@ -378,7 +378,7 @@ fn test_client_connection_loss_and_reconnect() {
 fn test_client_send() {
 
     let mut client = client_init(Config {
-        connection_drop_threshold: 100,
+        connection_drop_threshold: Duration::from_millis(100),
         .. Config::default()
     });
 
@@ -458,7 +458,7 @@ fn test_client_send() {
 fn test_client_receive() {
 
     let mut client = client_init(Config {
-        connection_drop_threshold: 100,
+        connection_drop_threshold: Duration::from_millis(100),
         .. Config::default()
     });
 

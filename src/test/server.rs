@@ -549,7 +549,7 @@ fn test_server_connection_close() {
 fn test_server_connection_loss() {
 
     let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config {
-        connection_drop_threshold: 100,
+        connection_drop_threshold: Duration::from_millis(100),
         .. Config::default()
     });
     server.listen("127.0.0.1:1234").ok();

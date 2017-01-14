@@ -715,7 +715,7 @@ fn test_packet_loss() {
 
     let config = Config {
         // set a low threshold for packet loss
-        packet_drop_threshold: 10,
+        packet_drop_threshold: Duration::from_millis(10),
         .. Config::default()
     };
 
@@ -864,7 +864,7 @@ fn test_packet_modification() {
 
     let config = Config {
         // set a low threshold for packet loss
-        packet_drop_threshold: 10,
+        packet_drop_threshold: Duration::from_millis(10),
         .. Config::default()
     };
 

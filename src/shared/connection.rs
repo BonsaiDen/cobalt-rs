@@ -6,14 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 extern crate rand;
-extern crate clock_ticks;
+
 
 // STD Dependencies -----------------------------------------------------------
 use std::cmp;
 use std::vec::Drain;
 use std::net::SocketAddr;
-use std::collections::HashMap;
-use std::collections::VecDeque;
+use std::time::{Duration, Instant};
+use std::collections::{HashMap, VecDeque};
 
 
 // Internal Dependencies ------------------------------------------------------
@@ -47,7 +47,7 @@ enum PacketState {
 #[derive(Debug)]
 struct SentPacketAck {
     seq: u32,
-    time: u64,
+    time: Instant,
     state: PacketState,
     packet: Option<Vec<u8>>
 }
@@ -157,7 +157,7 @@ pub struct Connection<R: RateLimiter, M: PacketModifier> {
     smoothed_rtt: f32,
 
     /// Last time a packet was received
-    last_receive_time: u64,
+    last_receive_time: Instant,
 
     /// Queue of recently received packets used for ack bitfield construction
     recv_ack_queue: VecDeque<u32>,
@@ -179,7 +179,7 @@ pub struct Connection<R: RateLimiter, M: PacketModifier> {
 
     /// Maximum time in milliseconds to wait for a remote response once the
     /// connection has entered the closing state
-    closing_threshold: u64,
+    closing_threshold: Duration,
 
     /// The internal message queue of the connection
     message_queue: MessageQueue,
@@ -236,14 +236,14 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             local_seq_number: 0,
             remote_seq_number: 0,
             smoothed_rtt: 0.0,
-            last_receive_time: clock_ticks::precise_time_ms(),
+            last_receive_time: Instant::now(),
             recv_ack_queue: VecDeque::new(),
             sent_ack_queue: Vec::new(),
             sent_packets: 0,
             recv_packets: 0,
             acked_packets: 0,
             lost_packets: 0,
-            closing_threshold: (1000 / config.send_rate) * 5,
+            closing_threshold: Duration::from_millis(1000 / config.send_rate * 5),
             message_queue: MessageQueue::new(config),
             rate_limiter: rate_limiter,
             packet_modifier: packet_modifier,
@@ -356,7 +356,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     /// Overrides the connection's existing configuration.
     pub fn set_config(&mut self, config: Config) {
         self.config = config;
-        self.closing_threshold = (1000 / config.send_rate) * 5;
+        self.closing_threshold = Duration::from_millis(1000 / config.send_rate * 5);
         self.message_queue.set_config(config);
     }
 
@@ -396,7 +396,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         }
 
         // Update time used for disconnect detection
-        self.last_receive_time = clock_ticks::precise_time_ms();
+        self.last_receive_time = Instant::now();
 
         // Read remote sequence number
         self.remote_seq_number = packet[8] as u32;
@@ -419,11 +419,14 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
                 // Calculate the roundtrip time from acknowledged packets
                 if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
-                    let tick_delay = (1000000000 / self.config.send_rate) / 1000000;
+                    // TODO IW: Clean this up
+                    let tick_delay = Duration::from_millis((
+                        1000000000 / self.config.send_rate) / 1000000
+                    );
                     self.acked_packets = self.acked_packets.wrapping_add(1);
                     self.smoothed_rtt = moving_average(
                         self.smoothed_rtt,
-                        (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay) as f32
+                        (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay)
                     );
                     ack.state = PacketState::Acked;
                     None
@@ -602,7 +605,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         if self.send_ack_required(self.local_seq_number) {
             self.sent_ack_queue.push(SentPacketAck {
                 seq: self.local_seq_number,
-                time: clock_ticks::precise_time_ms(),
+                time: Instant::now(),
                 state: PacketState::Unknown,
                 packet: Some(packet)
             });
@@ -632,7 +635,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         self.local_seq_number = 0;
         self.remote_seq_number = 0;
         self.smoothed_rtt = 0.0;
-        self.last_receive_time = clock_ticks::precise_time_ms();
+        self.last_receive_time = Instant::now();
         self.recv_ack_queue.clear();
         self.sent_ack_queue.clear();
         self.sent_packets = 0;
@@ -703,7 +706,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     fn update_send_state(&mut self) -> bool {
 
         // Calculate time since last received packet
-        let inactive_time = clock_ticks::precise_time_ms() - self.last_receive_time;
+        let inactive_time = self.last_receive_time.elapsed();
 
         match self.state {
 
@@ -765,7 +768,8 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 }
 
 // Static Helpers -------------------------------------------------------------
-fn moving_average(a: f32, b: f32) -> f32 {
+fn moving_average(a: f32, b: Duration) -> f32 {
+    let b = (b.as_secs() as f32) * 1000.0 + (b.subsec_nanos() / 1000000) as f32;
     (a - (a - b) * 0.10).max(0.0)
 }
 

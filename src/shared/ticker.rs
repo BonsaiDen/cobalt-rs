@@ -5,13 +5,11 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-extern crate clock_ticks;
-
 
 // STD Dependencies -----------------------------------------------------------
 use std::cmp;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 
 // Internal Dependencies ------------------------------------------------------
@@ -21,7 +19,7 @@ use ::shared::config::Config;
 // Tick Rate Limiting ---------------------------------------------------------
 #[derive(Debug)]
 pub struct Ticker {
-    tick_start: u64,
+    tick_start: Instant,
     tick_overflow: u64,
     tick_overflow_recovery: bool,
     tick_overflow_recovery_rate: f32,
@@ -32,7 +30,7 @@ impl Ticker {
 
     pub fn new(config: Config) -> Ticker {
         Ticker {
-            tick_start: 0,
+            tick_start: Instant::now(),
             tick_overflow: 0,
             tick_overflow_recovery: config.tick_overflow_recovery,
             tick_overflow_recovery_rate: config.tick_overflow_recovery_rate,
@@ -43,22 +41,22 @@ impl Ticker {
     pub fn set_config(&mut self, config: Config) {
         self.tick_overflow_recovery = config.tick_overflow_recovery;
         self.tick_overflow_recovery_rate = config.tick_overflow_recovery_rate;
-        self.tick_delay = 1000000000 / config.send_rate;
+        self.tick_delay = 1000000000 / config.send_rate
     }
 
     pub fn begin_tick(&mut self) {
-        self.tick_start = clock_ticks::precise_time_ns();
+        self.tick_start = Instant::now();
     }
 
     pub fn reset(&mut self) {
-        self.tick_start = 0;
+        self.tick_start = Instant::now();
         self.tick_overflow = 0;
     }
 
     pub fn end_tick(&mut self) {
 
         // Actual time taken by the tick
-        let time_taken = clock_ticks::precise_time_ns() - self.tick_start;
+        let time_taken = nanos_from_duration(self.tick_start.elapsed());
 
         // Required delay reduction to keep tick rate
         let mut reduction = cmp::min(time_taken, self.tick_delay);
@@ -92,5 +90,10 @@ impl Ticker {
 
     }
 
+}
+
+// Helpers ---------------------------------------------------------------------
+fn nanos_from_duration(d: Duration) -> u64 {
+    d.as_secs() * 1000 * 1000000 + d.subsec_nanos() as u64
 }
 

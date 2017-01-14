@@ -6,6 +6,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+// STD Dependencies -----------------------------------------------------------
+use std::time::Duration;
+
+
 /// Structure defining connection and message configuration options.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Config {
@@ -23,15 +28,15 @@ pub struct Config {
 
     /// Maximum roundtrip-time in milliseconds before a packet is considered
     /// lost. Default is `1000`.
-    pub packet_drop_threshold: u64,
+    pub packet_drop_threshold: Duration,
 
     /// Maximum time in milliseconds until the first packet must be received
     /// before a connection attempt fails. Default is `100`.
-    pub connection_init_threshold: u64,
+    pub connection_init_threshold: Duration,
 
     /// Maximum time in milliseconds between any two packets before the
     /// connection gets dropped. Default is `1000`.
-    pub connection_drop_threshold: u64,
+    pub connection_drop_threshold: Duration,
 
     /// The percent of available packet bytes to use when serializing
     /// `MessageKind::Instant` into a packet via a `MessageQueue`.
@@ -90,9 +95,9 @@ impl Default for Config {
             send_rate: 30,
             protocol_header: [1, 2, 3, 4],
             packet_max_size: 1400,
-            packet_drop_threshold: 1000,
-            connection_init_threshold: 100,
-            connection_drop_threshold: 1000,
+            packet_drop_threshold: Duration::from_millis(1000),
+            connection_init_threshold: Duration::from_millis(100),
+            connection_drop_threshold: Duration::from_millis(1000),
             message_quota_instant: 60.0,
             message_quota_reliable: 20.0,
             message_quota_ordered: 20.0,
