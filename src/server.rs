@@ -390,7 +390,7 @@ fn map_connection_events<R: RateLimiter, M: PacketModifier>(
         server_events.push_back(match event {
             ConnectionEvent::Connected => ServerEvent::Connection(id),
             ConnectionEvent::Lost => ServerEvent::ConnectionLost(id),
-            ConnectionEvent::Failed => unreachable!(),
+            ConnectionEvent::FailedToConnect => unreachable!(),
             ConnectionEvent::Closed(p) => ServerEvent::ConnectionClosed(id, p),
             ConnectionEvent::Message(payload) => ServerEvent::Message(id, payload),
             ConnectionEvent::CongestionStateChanged(c) => ServerEvent::ConnectionCongestionStateChanged(id, c),

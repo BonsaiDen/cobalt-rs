@@ -183,7 +183,7 @@ fn test_connecting_failed() {
     conn.send_packet(&mut socket, &address);
 
     let events: Vec<ConnectionEvent> = conn.events().collect();
-    assert_eq!(events, vec![ConnectionEvent::Failed]);
+    assert_eq!(events, vec![ConnectionEvent::FailedToConnect]);
 
     // Ignore any further packets
     conn.receive_packet([

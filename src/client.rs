@@ -246,7 +246,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
                 for e in self.connection.as_mut().unwrap().events() {
                     self.events.push_back(match e {
                         ConnectionEvent::Connected => ClientEvent::Connection,
-                        ConnectionEvent::Failed => ClientEvent::ConnectionFailed,
+                        ConnectionEvent::FailedToConnect => ClientEvent::ConnectionFailed,
                         ConnectionEvent::Lost => ClientEvent::ConnectionLost,
                         ConnectionEvent::Closed(p) => ClientEvent::ConnectionClosed(p),
                         ConnectionEvent::Message(payload) => ClientEvent::Message(payload),

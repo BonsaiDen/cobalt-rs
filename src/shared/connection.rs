@@ -88,7 +88,7 @@ pub enum ConnectionEvent {
     Connected,
 
     /// Emitted when a connection attempt failed.
-    Failed, // TODO rename to FailedToConnect?
+    FailedToConnect,
 
     /// Emitted when the already established connection is lost.
     Lost,
@@ -410,16 +410,19 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
                 // Calculate the roundtrip time from acknowledged packets
                 if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
-                    // TODO IW: Clean this up
-                    let tick_delay = Duration::from_millis((
-                        1000000000 / self.config.send_rate) / 1000000
+
+                    let tick_delay = Duration::from_millis(
+                        1000 / self.config.send_rate
                     );
+
                     self.acked_packets = self.acked_packets.wrapping_add(1);
                     self.smoothed_rtt = moving_average(
                         self.smoothed_rtt,
                         (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay)
                     );
+
                     ack.state = PacketState::Acked;
+
                     None
 
                 // Extract data from lost packets
@@ -709,7 +712,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
                 // Quickly detect initial connection failures
                 if inactive_time > self.config.connection_init_threshold {
                     self.state = ConnectionState::FailedToConnect;
-                    self.events.push(ConnectionEvent::Failed);
+                    self.events.push(ConnectionEvent::FailedToConnect);
                     false
 
                 } else {
