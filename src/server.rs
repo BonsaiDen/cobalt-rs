@@ -229,53 +229,55 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
                     // Try to extract the connection id from the packet
                     if let Some(id) = Connection::<R, M>::id_from_packet(&self.config, &packet) {
 
-                        // TODO optimize unnecessary copying
-                        let config = self.config;
-
-                        // Retrieve or create a connection for the current
-                        // connection id
-                        let mut inserted_address: Option<SocketAddr> = None;
-                        let connection = self.connections.entry(id).or_insert_with(|| {
-
-                            let mut conn = Connection::new(
-                                config,
-                                local_address,
-                                addr,
-                                R::new(config),
-                                M::new(config)
-                            );
-
-                            inserted_address = Some(addr);
-                            conn.set_id(id);
-                            conn
-
-                        });
-
-                        // Also map the intitial address which is used by
-                        // the connection
-                        if let Some(addr) = inserted_address.take() {
-                            self.addresses.insert(id, addr);
-                        }
-
-                        // Map the current remote address of the connection to
-                        // the latest address that sent a packet for the
-                        // connection id in question. This is done in order to
-                        // work in situations were the remote port of a
-                        // connection is switched around by NAT.
-                        if addr != connection.peer_addr() {
-                            // TODO verify packet sequence, only newer packets should be allowed up
-                            // update the peer address
-                            connection.set_peer_addr(addr);
-                            self.addresses.remove(&id);
-                            self.addresses.insert(id, addr);
-                        }
-
                         // Update server statistics
                         bytes_received += packet.len();
 
-                        // Then feed the packet into the connection object for
-                        // parsing
-                        connection.receive_packet(packet);
+                        // Get existing connection
+                        let connection = if self.connections.contains_key(&id) {
+
+                            let connection = self.connections.get_mut(&id).unwrap();
+
+                            // Check if the packet was actually handled
+                            if connection.receive_packet(packet) {
+
+                                // Map the current remote address of the connection to
+                                // the latest address that sent a packet for the
+                                // connection id in question. This is done in order to
+                                // work in situations were the remote port of a
+                                // connection is switched around by NAT.
+                                if addr != connection.peer_addr() {
+                                    connection.set_peer_addr(addr);
+                                    self.addresses.remove(&id);
+                                    self.addresses.insert(id, addr);
+                                }
+
+                            }
+
+                            connection
+
+                        // Or insert new one
+                        } else {
+
+                            let mut conn = Connection::new(
+                                self.config,
+                                local_address,
+                                addr,
+                                R::new(self.config),
+                                M::new(self.config)
+                            );
+
+                            conn.set_id(id);
+
+                            self.connections.insert(id, conn);
+                            self.addresses.insert(id, addr);
+
+                            // Receive first packet
+                            let connection = self.connections.get_mut(&id).unwrap();
+                            connection.receive_packet(packet);
+
+                            connection
+
+                        };
 
                         // Map any connection events
                         map_connection_events(&mut self.events, connection);

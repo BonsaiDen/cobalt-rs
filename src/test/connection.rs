@@ -377,6 +377,60 @@ fn test_send_and_receive_packet() {
 }
 
 #[test]
+fn test_receive_packet() {
+
+    let (mut conn, _) = create_socket(None);
+
+    assert_eq!(conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        0, // local sequence number
+        0, // remote sequence number we confirm
+        0, 0, 0, 0
+
+    ].to_vec()), true);
+
+    // Ignore message with same sequence number
+    assert_eq!(conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        0, // local sequence number
+        0, // remote sequence number we confirm
+        0, 0, 0, 0
+
+    ].to_vec()), false);
+
+    assert_eq!(conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        1, // local sequence number
+        0, // remote sequence number we confirm
+        0, 0, 0, 0
+
+    ].to_vec()), true);
+
+    assert_eq!(conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        2, // local sequence number
+        0, // remote sequence number we confirm
+        0, 0, 0, 0
+
+    ].to_vec()), true);
+
+    // Ignore packet with older sequence number
+    assert_eq!(conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        1, // local sequence number
+        0, // remote sequence number we confirm
+        0, 0, 0, 0
+
+    ].to_vec()), false);
+
+}
+
+#[test]
 fn test_send_and_receive_messages() {
 
     let (mut conn, mut socket) = create_socket(None);

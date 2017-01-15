@@ -374,16 +374,16 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     }
 
     /// Receives a incoming UDP packet.
-    pub fn receive_packet(&mut self, packet: Vec<u8>) {
+    pub fn receive_packet(&mut self, packet: Vec<u8>) -> bool {
 
         // Ignore any packets shorter then the header length
         if packet.len() < PACKET_HEADER_SIZE {
-            return;
+            return false;
         }
 
         // Update connection state
         if !self.update_receive_state(&packet) {
-            return;
+            return false;
         }
 
         // Update time used for disconnect detection
@@ -475,6 +475,8 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
         // Update packet statistics
         self.recv_packets = self.recv_packets.wrapping_add(1);
+
+        true
 
     }
 

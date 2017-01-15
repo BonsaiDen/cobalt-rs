@@ -201,11 +201,6 @@ fn test_server_connection() {
         ])
     ]);
 
-    assert_eq!(server_events(&mut server), vec![
-        // There should be no connection event here since the connection id
-        // got remapped to the new peer address
-    ]);
-
     // Shutdown and drop all connections
     server.shutdown().ok();
 
@@ -215,6 +210,100 @@ fn test_server_connection() {
     assert!(server.connections().keys().collect::<Vec<&ConnectionID>>().is_empty());
     assert!(server.connection(&ConnectionID(151521030)).is_err());
     assert!(server.connection(&ConnectionID(67108865)).is_err());
+
+}
+
+#[test]
+fn test_server_connection_address_remap() {
+
+    let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    server.listen("127.0.0.1:1234").ok();
+
+    // Accept a incoming connection
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.1:1000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    assert_eq!(server_events(&mut server), vec![
+        ServerEvent::Connection(ConnectionID(151521030))
+    ]);
+
+    // Test send to initial address
+    server.send(false).ok();
+    server.socket().unwrap().assert_sent(vec![
+        ("255.1.1.1:1000", [
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0
+
+        ].to_vec())
+    ]);
+
+    // Receive from same connection id but different address
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.4:2000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            1,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    // Trigger receival and address re-map
+    server.accept_receive().ok();
+
+    // Check send to new address
+    server.send(false).ok();
+    server.socket().unwrap().assert_sent(vec![
+        ("255.1.1.4:2000", [
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            1,
+            1,
+            0, 0, 0, 1
+
+        ].to_vec())
+    ]);
+
+    // Re-map should not happen for packets with older sequence numbers
+    server.socket().unwrap().mock_receive(vec![
+        ("255.1.1.8:4000", vec![
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            0,
+            0,
+            0, 0, 0, 0
+        ])
+    ]);
+
+    server.accept_receive().ok();
+    server.send(false).ok();
+
+    // Verify send to first re-mapped address
+    server.socket().unwrap().assert_sent(vec![
+        ("255.1.1.4:2000", [
+            1, 2, 3, 4,
+            9, 8, 7, 6,
+            2,
+            1,
+            0, 0, 0, 1
+
+        ].to_vec())
+    ]);
+
+    assert_eq!(server_events(&mut server), vec![
+        // There should be no connection event here since the connection id
+        // got remapped to the new peer address
+    ]);
 
 }
 
@@ -307,7 +396,7 @@ fn test_server_send() {
         ("255.1.1.2:1001", vec![
             1, 2, 3, 4,
             9, 8, 7, 6,
-            0,
+            1,
             0,
             0, 0, 0, 0
         ])
@@ -328,8 +417,8 @@ fn test_server_send() {
             1, 2, 3, 4,
             9, 8, 7, 6,
             1,
-            0,
-            0, 0, 0, 0,
+            1,
+            0, 0, 0, 1,
             0, 0, 0, 3, 66, 97, 122
 
         ].to_vec())
