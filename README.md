@@ -1,11 +1,11 @@
 # cobalt [![Build Status](https://img.shields.io/travis/BonsaiDen/cobalt-rs/master.svg?style=flat-square)](https://travis-ci.org/BonsaiDen/cobalt-rs) [![Build status](https://img.shields.io/appveyor/ci/BonsaiDen/cobalt-rs/master.svg?style=flat-square)](https://ci.appveyor.com/project/BonsaiDen/cobalt-rs) [![Crates.io](https://img.shields.io/crates/v/cobalt.svg?style=flat-square)](https://crates.io/crates/cobalt) [![License](https://img.shields.io/crates/l/cobalt.svg?style=flat-square)]() 
 
-A [rust](https://rust-lang.org/) based networking library which provides [virtual 
-connections over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) .
-It also comes with a messaging layer for the sending of un-/reliable and/or 
-ordered messages.
+A [rust](https://rust-lang.org/) based networking library providing [virtual 
+connections over UDP](http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/) 
+with an included message layer supporting both unreliable messaging and reliable 
+messages with optional in-order delivery. 
 
-- [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt/) for the latest release.
+- [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt/) for the latest stable release.
 
 
 ## Usage
@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-cobalt = "0.12.0"
+cobalt = "0.20.0"
 ```
 
 and this to your crate root:
@@ -23,14 +23,8 @@ and this to your crate root:
 extern crate cobalt;
 ```
 
-You can also enable optional features such as handlers for lost packets or
-packet compression inside your `Cargo.toml`:
-
-```toml
-[dependencies.cobalt]
-version = "0.12.0"
-features = ["packet_handler_lost", "packet_handler_compress"]
-```
+For usage examples please refer to the documentation of the libraries server 
+and client abstractions.
 
 ## License
 
