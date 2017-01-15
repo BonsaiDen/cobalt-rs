@@ -91,7 +91,7 @@ fn test_client_disconnected() {
     assert_eq!(client.receive(), Err(TryRecvError::Disconnected));
     assert_eq!(client.send(false).unwrap_err().kind(), ErrorKind::NotConnected);
     assert_eq!(client.reset().unwrap_err().kind(), ErrorKind::NotConnected);
-    assert_eq!(client.close().unwrap_err().kind(), ErrorKind::NotConnected);
+    assert_eq!(client.disconnect().unwrap_err().kind(), ErrorKind::NotConnected);
 
 }
 
@@ -108,10 +108,10 @@ fn test_client_connect_reset_close() {
     assert!(client.reset().is_ok());
     assert!(client.socket().is_ok());
 
-    assert!(client.close().is_ok());
+    assert!(client.disconnect().is_ok());
     assert_eq!(client.socket().unwrap_err().kind(), ErrorKind::NotConnected);
 
-    assert_eq!(client.close().unwrap_err().kind(), ErrorKind::NotConnected);
+    assert_eq!(client.disconnect().unwrap_err().kind(), ErrorKind::NotConnected);
     assert_eq!(client.reset().unwrap_err().kind(), ErrorKind::NotConnected);
 
 }
@@ -127,7 +127,7 @@ fn test_client_without_connection() {
 
     assert!(client.send(false).is_ok());
 
-    assert!(client.close().is_ok());
+    assert!(client.disconnect().is_ok());
 
 }
 
@@ -248,8 +248,8 @@ fn test_client_reset_events() {
     client.receive().ok();
     client.send(false).ok();
 
-    // Close and clear events
-    client.close().ok();
+    // Disconnect and clear events
+    client.disconnect().ok();
 
     // Re-connect to make events accesible again
     client.connect("255.1.1.1:5678").ok();

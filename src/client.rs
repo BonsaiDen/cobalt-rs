@@ -85,8 +85,8 @@ pub enum ClientEvent {
 ///
 /// // }
 ///
-/// // Close the connection and unbind its socket
-/// client.close();
+/// // Disconnect the client, closing its connection and unbinding its socket
+/// client.disconnect();
 /// ```
 #[derive(Debug)]
 pub struct Client<S: Socket, R: RateLimiter, M: PacketModifier> {
@@ -324,7 +324,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
 
     /// Drops the client's connection to the server, freeing the socket and
     /// clearing any state.
-    pub fn close(&mut self) -> Result<(), Error> {
+    pub fn disconnect(&mut self) -> Result<(), Error> {
         if self.socket.is_some() {
             self.reset().ok();
             self.should_receive = false;

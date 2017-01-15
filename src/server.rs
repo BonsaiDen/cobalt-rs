@@ -70,7 +70,7 @@ pub enum ServerEvent {
 ///         // Handle events (e.g. Connection, Messages, etc.)
 ///     }
 ///
-///     // Send a message to all of the servers clients
+///     // Send a message to all connected clients
 ///     for (_, conn) in server.connections() {
 ///         conn.send(MessageKind::Instant, b"Ping".to_vec());
 ///     }
@@ -83,7 +83,7 @@ pub enum ServerEvent {
 /// // }
 ///
 /// // Shutdown the server (freeing its socket and closing all its connections)
-/// server.shutdown().is_ok();
+/// server.shutdown();
 /// ```
 ///
 #[derive(Debug)]
