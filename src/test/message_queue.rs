@@ -1,12 +1,23 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::super::Config;
-use super::super::shared::message_queue::{MessageKind, MessageQueue};
+use ::Config;
+use ::shared::message_queue::{MessageKind, MessageQueue};
+
+#[test]
+fn test_debug_fmt() {
+
+    let mut q = MessageQueue::new(Config::default());
+    q.send(MessageKind::Instant, b"Hello World".to_vec());
+
+    // Check debug fmt support
+    let _ = format!("{:?}", q);
+
+}
 
 #[test]
 fn test_send_write() {

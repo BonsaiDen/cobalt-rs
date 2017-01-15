@@ -1,11 +1,14 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::super::Config;
+
+
+// Internal Dependencies ------------------------------------------------------
+use ::Config;
 
 /// A structure containing stats data average of the course of one second.
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -20,7 +23,7 @@ pub struct Stats {
 }
 
 impl Stats {
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.bytes_sent = 0;
         self.bytes_received = 0;
     }
@@ -43,7 +46,7 @@ impl Default for Stats {
 pub struct StatsCollector {
 
     /// Internal tick value
-    tick: u32,
+    tick: u64,
 
     /// The collectors's configuration
     config: Config,
@@ -110,6 +113,8 @@ impl StatsCollector {
     /// Resets the internal data used for average calculation, but does not
     /// reset the last calculated averages.
     pub fn reset(&mut self) {
+        self.averages.bytes_sent = 0;
+        self.averages.bytes_received = 0;
         for d in &mut self.buckets {
             d.reset();
         }

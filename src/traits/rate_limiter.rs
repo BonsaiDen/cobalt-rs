@@ -1,14 +1,24 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+
+// STD Dependencies -----------------------------------------------------------
 use std::fmt;
 
-/// Trait for implementation of a network congestion avoidance algorithm.
+
+// Internal Dependencies ------------------------------------------------------
+use super::super::Config;
+
+
+/// Trait describing a network congestion avoidance algorithm.
 pub trait RateLimiter {
+
+    /// Method that constructs a new rate limiter using the provided configuration.
+    fn new(Config) -> Self where Self: Sized;
 
     /// Method implementing a congestion avoidance algorithm based on round
     /// trip time and packet loss.

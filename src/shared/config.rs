@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,12 +6,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+
+// STD Dependencies -----------------------------------------------------------
+use std::time::Duration;
+
+
 /// Structure defining connection and message configuration options.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Config {
 
     /// Number of packets send per second. Default is `30`.
-    pub send_rate: u32,
+    pub send_rate: u64,
 
     /// Maximum bytes that can be received / send in one packet. Default
     /// `1400`.
@@ -23,15 +28,19 @@ pub struct Config {
 
     /// Maximum roundtrip-time in milliseconds before a packet is considered
     /// lost. Default is `1000`.
-    pub packet_drop_threshold: u32,
+    pub packet_drop_threshold: Duration,
 
     /// Maximum time in milliseconds until the first packet must be received
     /// before a connection attempt fails. Default is `100`.
-    pub connection_init_threshold: u32,
+    pub connection_init_threshold: Duration,
 
     /// Maximum time in milliseconds between any two packets before the
     /// connection gets dropped. Default is `1000`.
-    pub connection_drop_threshold: u32,
+    pub connection_drop_threshold: Duration,
+
+    /// Maximum time in milliseconds to wait for remote confirmation after
+    /// programmatically closing a connection. Default is `150`.
+    pub connection_closing_threshold: Duration,
 
     /// The percent of available packet bytes to use when serializing
     /// `MessageKind::Instant` into a packet via a `MessageQueue`.
@@ -90,9 +99,10 @@ impl Default for Config {
             send_rate: 30,
             protocol_header: [1, 2, 3, 4],
             packet_max_size: 1400,
-            packet_drop_threshold: 1000,
-            connection_init_threshold: 100,
-            connection_drop_threshold: 1000,
+            packet_drop_threshold: Duration::from_millis(1000),
+            connection_init_threshold: Duration::from_millis(100),
+            connection_drop_threshold: Duration::from_millis(1000),
+            connection_closing_threshold: Duration::from_millis(150),
             message_quota_instant: 60.0,
             message_quota_reliable: 20.0,
             message_quota_ordered: 20.0,

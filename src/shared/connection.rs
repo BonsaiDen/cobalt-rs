@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,15 +6,19 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 extern crate rand;
-extern crate clock_ticks;
 
+
+// STD Dependencies -----------------------------------------------------------
 use std::cmp;
+use std::vec::Drain;
 use std::net::SocketAddr;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use super::message_queue::{MessageQueue, MessageIterator};
-use super::super::traits::socket::Socket;
-use super::super::{Config, MessageKind, Handler, RateLimiter};
+use std::time::{Duration, Instant};
+use std::collections::{HashMap, VecDeque};
+
+
+// Internal Dependencies ------------------------------------------------------
+use super::message_queue::MessageQueue;
+use ::{Config, MessageKind, PacketModifier, RateLimiter, Socket};
 
 /// Maximum number of acknowledgement bits available in the packet header.
 const MAX_ACK_BITS: u32 = 32;
@@ -43,13 +47,13 @@ enum PacketState {
 #[derive(Debug)]
 struct SentPacketAck {
     seq: u32,
-    time: u32,
+    time: Instant,
     state: PacketState,
     packet: Option<Vec<u8>>
 }
 
 /// Enum indicating the state of a connection.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ConnectionState {
 
     /// The connection has been opened but has yet to receive the first
@@ -76,6 +80,35 @@ pub enum ConnectionState {
 
 }
 
+/// Enum of connection related network events.
+#[derive(Debug, PartialEq)]
+pub enum ConnectionEvent {
+
+    /// Emitted once a the connection has been established.
+    Connected,
+
+    /// Emitted when a connection attempt failed.
+    Failed, // TODO rename to FailedToConnect?
+
+    /// Emitted when the already established connection is lost.
+    Lost,
+
+    /// Emitted when the already established connection is closed
+    /// programmatically.
+    Closed(bool),
+
+    /// Emitted for each message that is received over the connection.
+    Message(Vec<u8>),
+
+    /// Event emitted for each packet which was not confirmed by the remote end
+    /// of the connection within the specified limits.
+    PacketLost(Vec<u8>),
+
+    /// Emitted each time the connection's congestion state changes.
+    CongestionStateChanged(bool)
+}
+
+
 /// Representation of a random ID for connection identification purposes.
 ///
 /// Used to uniquely\* identify the reliable connections. The ID is send with
@@ -88,16 +121,16 @@ pub enum ConnectionState {
 /// > for two connections to end up with the same ID, in that case - due to
 /// conflicting ack sequences and message data - both connections will get
 /// dropped shortly.
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Ord, PartialOrd)]
 pub struct ConnectionID(pub u32);
 
 
 /// Type alias for connection mappings.
-pub type ConnectionMap = HashMap<ConnectionID, Connection>;
+pub type ConnectionMap = HashMap<ConnectionID, Connection<RateLimiter, PacketModifier>>;
 
-/// Implementation of a reliable, virtual connection logic.
+/// Implementation of a reliable, virtual socket connection.
 #[derive(Debug)]
-pub struct Connection {
+pub struct Connection<R: RateLimiter, M: PacketModifier> {
 
     /// The connection's configuration
     config: Config,
@@ -124,7 +157,7 @@ pub struct Connection {
     smoothed_rtt: f32,
 
     /// Last time a packet was received
-    last_receive_time: u32,
+    last_receive_time: Instant,
 
     /// Queue of recently received packets used for ack bitfield construction
     recv_ack_queue: VecDeque<u32>,
@@ -148,11 +181,17 @@ pub struct Connection {
     message_queue: MessageQueue,
 
     /// The rate limiter used to handle and avoid network congestion
-    rate_limiter: Box<RateLimiter>
+    rate_limiter: R,
+
+    /// The packet modifier used for payload modification
+    packet_modifier: M,
+
+    /// List of accumulated connection events
+    events: Vec<ConnectionEvent>
 
 }
 
-impl Connection {
+impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
     /// Creates a new Virtual Connection over the given `SocketAddr`.
     ///
@@ -160,13 +199,18 @@ impl Connection {
     ///
     /// ```
     /// use std::net::SocketAddr;
-    /// use cobalt::{BinaryRateLimiter, Connection, ConnectionState, Config};
+    /// use cobalt::{
+    ///     BinaryRateLimiter,
+    ///     Connection, ConnectionState, Config,
+    ///     NoopPacketModifier, PacketModifier, RateLimiter
+    /// };
     ///
     /// let config = Config::default();
     /// let local_address: SocketAddr = "127.0.0.1:0".parse().unwrap();
     /// let peer_address: SocketAddr = "255.0.0.1:0".parse().unwrap();
-    /// let limiter = BinaryRateLimiter::new(&config);
-    /// let conn = Connection::new(config, local_address, peer_address, limiter);
+    /// let limiter = BinaryRateLimiter::new(config);
+    /// let modifier = NoopPacketModifier::new(config);
+    /// let conn = Connection::new(config, local_address, peer_address, limiter, modifier);
     ///
     /// assert!(conn.state() == ConnectionState::Connecting);
     /// assert_eq!(conn.open(), true);
@@ -175,9 +219,10 @@ impl Connection {
         config: Config,
         local_addr: SocketAddr,
         peer_addr: SocketAddr,
-        rate_limiter: Box<RateLimiter>
+        rate_limiter: R,
+        packet_modifier: M
 
-    ) -> Connection {
+    ) -> Connection<R, M> {
         Connection {
             config: config,
             random_id: ConnectionID(rand::random()),
@@ -187,7 +232,7 @@ impl Connection {
             local_seq_number: 0,
             remote_seq_number: 0,
             smoothed_rtt: 0.0,
-            last_receive_time: precise_time_ms(),
+            last_receive_time: Instant::now(),
             recv_ack_queue: VecDeque::new(),
             sent_ack_queue: Vec::new(),
             sent_packets: 0,
@@ -195,7 +240,9 @@ impl Connection {
             acked_packets: 0,
             lost_packets: 0,
             message_queue: MessageQueue::new(config),
-            rate_limiter: rate_limiter
+            rate_limiter: rate_limiter,
+            packet_modifier: packet_modifier,
+            events: Vec::new()
         }
     }
 
@@ -204,7 +251,11 @@ impl Connection {
     /// # Examples
     ///
     /// ```
-    /// use cobalt::{Connection, ConnectionID, Config};
+    /// use cobalt::{
+    ///     BinaryRateLimiter,
+    ///     Connection, ConnectionID, Config,
+    ///     NoopPacketModifier
+    /// };
     ///
     /// let config = Config {
     ///     protocol_header: [11, 22, 33, 44],
@@ -219,12 +270,12 @@ impl Connection {
     ///      0,  0, 0,  0
     /// ];
     ///
-    /// let conn_id = Connection::id_from_packet(&config, &packet);
+    /// let conn_id = Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(&config, &packet);
     ///
     /// assert!(conn_id == Some(ConnectionID(16909060)));
     /// ```
     pub fn id_from_packet(config: &Config, packet: &[u8]) -> Option<ConnectionID> {
-        if &packet[0..4] == &config.protocol_header {
+        if packet.len() >= 8 && &packet[0..4] == &config.protocol_header {
             Some(ConnectionID(
                 (packet[4] as u32) << 24 | (packet[5] as u32) << 16 |
                 (packet[6] as u32) << 8  |  packet[7] as u32
@@ -309,18 +360,21 @@ impl Connection {
         self.message_queue.send(kind, payload);
     }
 
-    /// Returns a consuming iterator over all messages received over this
-    /// connections.
-    pub fn received(&mut self) -> MessageIterator {
-        self.message_queue.received()
+    /// Returns a drain iterator over all queued events from this connection.
+    pub fn events(&mut self) -> Drain<ConnectionEvent> {
+
+        // We only fetch messages from the queue "on demand" they will otherwise
+        // get dismissed once send_packet is called.
+        for message in self.message_queue.received() {
+            self.events.push(ConnectionEvent::Message(message));
+        }
+
+        self.events.drain(0..)
+
     }
 
     /// Receives a incoming UDP packet.
-    pub fn receive_packet<O>(
-        &mut self,
-        packet: Vec<u8>, tick_delay: u32,
-        owner: &mut O, handler: &mut Handler<O>
-    ) {
+    pub fn receive_packet(&mut self, packet: Vec<u8>) {
 
         // Ignore any packets shorter then the header length
         if packet.len() < PACKET_HEADER_SIZE {
@@ -328,12 +382,12 @@ impl Connection {
         }
 
         // Update connection state
-        if !self.update_receive_state(&packet, owner, handler) {
+        if !self.update_receive_state(&packet) {
             return;
         }
 
         // Update time used for disconnect detection
-        self.last_receive_time = precise_time_ms();
+        self.last_receive_time = Instant::now();
 
         // Read remote sequence number
         self.remote_seq_number = packet[8] as u32;
@@ -356,10 +410,14 @@ impl Connection {
 
                 // Calculate the roundtrip time from acknowledged packets
                 if seq_was_acked(ack.seq, ack_seq_number, bitfield) {
+                    // TODO IW: Clean this up
+                    let tick_delay = Duration::from_millis((
+                        1000000000 / self.config.send_rate) / 1000000
+                    );
                     self.acked_packets = self.acked_packets.wrapping_add(1);
                     self.smoothed_rtt = moving_average(
                         self.smoothed_rtt,
-                        (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay) as f32
+                        (cmp::max(self.last_receive_time - ack.time, tick_delay) - tick_delay)
                     );
                     ack.state = PacketState::Acked;
                     None
@@ -382,27 +440,20 @@ impl Connection {
                 // Push messages from lost packets into the queue
                 self.message_queue.lost_packet(&lost_packet[PACKET_HEADER_SIZE..]);
 
-                // Optional packet lost notification
-                if cfg!(feature = "packet_handler_lost") {
-                    handler.connection_packet_lost(
-                        owner, self, &lost_packet[PACKET_HEADER_SIZE..]
-                    );
-                }
+                // Packet lost notification
+                self.events.push(ConnectionEvent::PacketLost(
+                    lost_packet[PACKET_HEADER_SIZE..].to_vec()
+                ));
 
             }
 
         }
 
         // Push packet data into message queue
-        if cfg!(feature = "packet_handler_compress") {
-
-            // Optional packet decompression
-            let packet = handler.connection_packet_decompress(
-                owner, self,
-                &packet[PACKET_HEADER_SIZE..]
-            );
-
-            self.message_queue.receive_packet(&packet[..]);
+        if let Some(payload) = self.packet_modifier.incoming(
+            &packet[PACKET_HEADER_SIZE..]
+        ) {
+            self.message_queue.receive_packet(&payload[..]);
 
         } else {
             self.message_queue.receive_packet(&packet[PACKET_HEADER_SIZE..]);
@@ -425,15 +476,15 @@ impl Connection {
     }
 
     /// Send a new outgoing UDP packet.
-    pub fn send_packet<O, S: Socket>(
+    pub fn send_packet<S: Socket>(
         &mut self,
-        socket: &mut S, addr: &SocketAddr,
-        owner: &mut O, handler: &mut Handler<O>
+        socket: &mut S,
+        addr: &SocketAddr
 
     ) -> u32 {
 
         // Update connection state
-        if !self.update_send_state(owner, handler) {
+        if !self.update_send_state() {
             return 0;
         }
 
@@ -446,7 +497,7 @@ impl Connection {
 
         // Check if the state changed and invoke handler
         if congested != self.rate_limiter.congested() {
-            handler.connection_congestion_state(owner, self, !congested);
+            self.events.push(ConnectionEvent::CongestionStateChanged(!congested));
         }
 
         // Check if we should be sending packets, if not skip this packet
@@ -514,14 +565,13 @@ impl Connection {
         }
 
         // Send packet to socket
-        let bytes_sent = if cfg!(feature = "packet_handler_compress") {
+        let bytes_sent = if let Some(mut payload) = self.packet_modifier.outgoing(
+            &packet[PACKET_HEADER_SIZE..]
+        ) {
 
-            // Optional packet compression
-            let packet = handler.connection_packet_compress(
-                owner, self,
-                packet[..PACKET_HEADER_SIZE].to_vec(),
-                &packet[PACKET_HEADER_SIZE..]
-            );
+            // Combine existing header with modified packet payload
+            let mut packet = packet[..PACKET_HEADER_SIZE].to_vec();
+            packet.append(&mut payload);
 
             socket.send_to(
                 &packet[..], *addr
@@ -546,7 +596,7 @@ impl Connection {
         if self.send_ack_required(self.local_seq_number) {
             self.sent_ack_queue.push(SentPacketAck {
                 seq: self.local_seq_number,
-                time: precise_time_ms(),
+                time: Instant::now(),
                 state: PacketState::Unknown,
                 packet: Some(packet)
             });
@@ -576,7 +626,7 @@ impl Connection {
         self.local_seq_number = 0;
         self.remote_seq_number = 0;
         self.smoothed_rtt = 0.0;
-        self.last_receive_time = precise_time_ms();
+        self.last_receive_time = Instant::now();
         self.recv_ack_queue.clear();
         self.sent_ack_queue.clear();
         self.sent_packets = 0;
@@ -589,17 +639,13 @@ impl Connection {
 
     /// Closes the connection, no further packets will be received or send.
     pub fn close(&mut self) {
-        self.config.connection_drop_threshold = 20;
         self.state = ConnectionState::Closing;
     }
 
 
     // Internal State Handling ------------------------------------------------
 
-    fn update_receive_state<T>(
-        &mut self, packet: &[u8], owner: &mut T, handler: &mut Handler<T>
-
-    ) -> bool {
+    fn update_receive_state(&mut self, packet: &[u8]) -> bool {
 
         // Ignore any packets which do not match the desired protocol header
         &packet[0..4] == &self.config.protocol_header && match self.state {
@@ -619,7 +665,7 @@ impl Connection {
                 // Reset Packet Loss upon connection
                 self.lost_packets = 0;
 
-                handler.connection(owner, self);
+                self.events.push(ConnectionEvent::Connected);
 
                 true
 
@@ -630,7 +676,7 @@ impl Connection {
                 // Check for closure packet from remote
                 if &packet[8..14] == &CLOSURE_PACKET_DATA {
                     self.state = ConnectionState::Closed;
-                    handler.connection_closed(owner, self, true);
+                    self.events.push(ConnectionEvent::Closed(true));
                     false
 
                 } else {
@@ -647,13 +693,10 @@ impl Connection {
 
     }
 
-    fn update_send_state<T>(
-        &mut self, owner: &mut T, handler: &mut Handler<T>
-
-    ) -> bool {
+    fn update_send_state(&mut self) -> bool {
 
         // Calculate time since last received packet
-        let inactive_time = precise_time_ms() - self.last_receive_time;
+        let inactive_time = self.last_receive_time.elapsed();
 
         match self.state {
 
@@ -666,7 +709,7 @@ impl Connection {
                 // Quickly detect initial connection failures
                 if inactive_time > self.config.connection_init_threshold {
                     self.state = ConnectionState::FailedToConnect;
-                    handler.connection_failed(owner, self);
+                    self.events.push(ConnectionEvent::Failed);
                     false
 
                 } else {
@@ -680,7 +723,7 @@ impl Connection {
                 // Detect connection timeouts
                 if inactive_time > self.config.connection_drop_threshold {
                     self.state = ConnectionState::Lost;
-                    handler.connection_lost(owner, self);
+                    self.events.push(ConnectionEvent::Lost);
                     false
 
                 } else {
@@ -692,9 +735,9 @@ impl Connection {
             ConnectionState::Closing => {
 
                 // Detect connection closure
-                if inactive_time > self.config.connection_drop_threshold {
+                if inactive_time > self.config.connection_closing_threshold {
                     self.state = ConnectionState::Closed;
-                    handler.connection_closed(owner, self, false);
+                    self.events.push(ConnectionEvent::Closed(false));
                     false
 
                 } else {
@@ -715,7 +758,8 @@ impl Connection {
 }
 
 // Static Helpers -------------------------------------------------------------
-fn moving_average(a: f32, b: f32) -> f32 {
+fn moving_average(a: f32, b: Duration) -> f32 {
+    let b = (b.as_secs() as f32) * 1000.0 + (b.subsec_nanos() / 1000000) as f32;
     (a - (a - b) * 0.10).max(0.0)
 }
 
@@ -741,9 +785,5 @@ fn seq_was_acked(seq: u32, ack: u32, bitfield: u32) -> bool {
         let bit = seq_bit_index(seq, ack);
         bit < MAX_ACK_BITS && (bitfield & (1 << bit)) != 0
     }
-}
-
-fn precise_time_ms() -> u32 {
-    (clock_ticks::precise_time_ns() / 1000000) as u32
 }
 

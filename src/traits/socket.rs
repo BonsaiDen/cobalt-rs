@@ -5,12 +5,18 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+
+// STD Dependencies -----------------------------------------------------------
 use std::net;
+use std::fmt;
 use std::io::Error;
 use std::sync::mpsc::TryRecvError;
 
-/// Trait for implementation of a non-blocking UDP socket.
-pub trait Socket {
+/// Trait describing a non-blocking low latency socket.
+pub trait Socket: fmt::Debug {
+
+    /// Method that tries to bind a new socket at the specified address.
+    fn new<T: net::ToSocketAddrs>(T, usize) -> Result<Self, Error> where Self: Sized;
 
     /// Method that attempts to return a incoming packet on this socket without
     /// blocking.

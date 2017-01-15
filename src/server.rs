@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2016 Ivo Wetzel
+// Copyright (c) 2015-2017 Ivo Wetzel
 
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -6,222 +6,396 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// STD Dependencies -----------------------------------------------------------
 use std::io::{Error, ErrorKind};
-use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
-use traits::socket::Socket;
-use shared::udp_socket::UdpSocket;
-use shared::stats::{StatsCollector, Stats};
-use super::{Config, Connection, ConnectionID, Handler, tick};
+use std::sync::mpsc::TryRecvError;
+use std::collections::{HashMap, VecDeque};
 
-/// Implementation of a multi-client server with handler based event dispatch.
-#[derive(Debug)]
-pub struct Server {
-    closed: bool,
-    config: Config,
-    local_address: Option<SocketAddr>,
-    statistics: StatsCollector
+
+// Internal Dependencies ------------------------------------------------------
+use shared::stats::{Stats, StatsCollector};
+use shared::ticker::Ticker;
+use super::{
+    Config,
+    ConnectionID, Connection, ConnectionEvent,
+    RateLimiter, PacketModifier, Socket
+};
+
+
+/// Enum of server network events.
+#[derive(Debug, PartialEq)]
+pub enum ServerEvent {
+
+    /// Event emitted once a new client connection has been established.
+    Connection(ConnectionID),
+
+    /// Event emitted when a existing client connection is lost.
+    ConnectionLost(ConnectionID),
+
+    /// Event emitted when a client connection is closed programmatically.
+    ConnectionClosed(ConnectionID, bool),
+
+    /// Event emitted for each message received from a client connection.
+    Message(ConnectionID, Vec<u8>),
+
+    /// Event emitted each time a client's connection congestion state changes.
+    ConnectionCongestionStateChanged(ConnectionID, bool),
+
+    /// Event emitted each time a client connection packet is lost.
+    PacketLost(ConnectionID, Vec<u8>)
+
 }
 
-impl Server {
+
+/// Implementation of a multi-client low latency socket server.
+///
+/// # Basic Usage
+///
+/// ```
+/// use cobalt::{
+///     BinaryRateLimiter, Server, Config, NoopPacketModifier, MessageKind, UdpSocket
+/// };
+///
+/// // Create a new server that communicates over a udp socket
+/// let mut server = Server::<UdpSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+///
+/// // Make the server listen on port `1234` on all interfaces.
+/// server.listen("0.0.0.0:1234").expect("Failed to bind to socket.");
+///
+/// // loop {
+///
+///     // Accept incoming connections and fetch their events
+///     while let Ok(event) = server.accept_receive() {
+///         // Handle events (e.g. Connection, Messages, etc.)
+///     }
+///
+///     // Send a message to all of the servers clients
+///     for (_, conn) in server.connections() {
+///         conn.send(MessageKind::Instant, b"Ping".to_vec());
+///     }
+///
+///     // Send all outgoing messages.
+///     //
+///     // Also auto delay the current thread to achieve the configured tick rate.
+///     server.send(true);
+///
+/// // }
+///
+/// // Shutdown the server (freeing its socket and closing all its connections)
+/// server.shutdown().is_ok();
+/// ```
+///
+#[derive(Debug)]
+pub struct Server<S: Socket, R: RateLimiter, M: PacketModifier> {
+    config: Config,
+    socket: Option<S>,
+    connections: HashMap<ConnectionID, Connection<R, M>>,
+    addresses: HashMap<ConnectionID, SocketAddr>,
+    ticker: Ticker,
+    local_address: Option<SocketAddr>,
+    events: VecDeque<ServerEvent>,
+    should_receive: bool,
+    stats_collector: StatsCollector,
+    stats: Stats
+}
+
+impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
     /// Creates a new server with the given configuration.
-    pub fn new(config: Config) -> Server {
+    pub fn new(config: Config) -> Server<S, R, M> {
         Server {
-            closed: false,
             config: config,
+            socket: None,
+            connections: HashMap::new(),
+            addresses: HashMap::new(),
+            ticker: Ticker::new(config),
             local_address: None,
-            statistics: StatsCollector::new(config)
+            events: VecDeque::new(),
+            should_receive: false,
+            stats_collector: StatsCollector::new(config),
+            stats: Stats {
+                bytes_sent: 0,
+                bytes_received: 0
+            }
         }
     }
 
-    /// Returns the local address that the server is bound to.
+    /// Returns the number of bytes sent over the last second.
+    pub fn bytes_sent(&self) -> u32 {
+        self.stats.bytes_sent
+    }
+
+    /// Returns the number of bytes received over the last second.
+    pub fn bytes_received(&self) -> u32 {
+        self.stats.bytes_received
+    }
+
+    /// Returns the local address that the client is sending from.
     pub fn local_addr(&self) -> Result<SocketAddr, Error> {
         self.local_address.ok_or_else(|| Error::new(ErrorKind::AddrNotAvailable, ""))
     }
 
-    /// Returns statistics (i.e. bandwidth usage) for the last second.
-    pub fn stats(&mut self) -> Stats {
-        self.statistics.average()
+    /// Returns a mutable reference to the specified client connection.
+    pub fn connection(&mut self, id: &ConnectionID) -> Result<&mut Connection<R, M>, Error> {
+        if self.socket.is_some() {
+            if let Some(conn) = self.connections.get_mut(id) {
+                Ok(conn)
+
+            } else {
+                Err(Error::new(ErrorKind::NotFound, ""))
+            }
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
     }
 
-    /// Binds the server to the specified local address by creating a socket
-    /// and actively listens for incoming client connections.
-    ///
-    /// Clients connecting to the server must use a compatible connection
-    /// / packet configuration in order to be able to connect.
-    ///
-    /// The `handler` is a struct that implements the `Handler` trait in order
-    /// to handle events from the server and its connections.
-    pub fn bind<A: ToSocketAddrs>(
-        &mut self, handler: &mut Handler<Server>, addr: A
+    /// Returns a mutable reference to the servers client connections.
+    pub fn connections(&mut self) -> &mut HashMap<ConnectionID, Connection<R, M>> {
+        &mut self.connections
+    }
 
-    ) -> Result<(), Error> {
+    /// Returns a mutable reference to the server's underlying socket.
+    pub fn socket(&mut self) -> Result<&mut S, Error> {
+        if let Some(socket) = self.socket.as_mut() {
+            Ok(socket)
 
-        let socket = try!(UdpSocket::new(
-            addr,
-            self.config.packet_max_size
-        ));
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
+    }
 
-        self.bind_to_socket(handler, socket)
+    /// Returns the server's current configuration.
+    pub fn config(&self) -> Config {
+        self.config
+    }
+
+    /// Overrides the server's current configuration.
+    pub fn set_config(&mut self, config: Config) {
+
+        self.config = config;
+        self.ticker.set_config(config);
+        self.stats_collector.set_config(config);
+
+        for (_, conn) in &mut self.connections {
+            conn.set_config(config);
+        }
 
     }
 
-    /// Binds the server to specified socket and actively listens for incoming
-    /// client connections.
-    ///
-    /// Clients connecting to the server must use a compatible connection
-    /// / packet configuration in order to be able to connect.
-    ///
-    /// The `handler` is a struct that implements the `Handler` trait in order
-    /// to handle events from the server and its connections.
-    pub fn bind_to_socket<S: Socket>(
-        &mut self, handler: &mut Handler<Server>, mut socket: S
+    /// Binds the server to listen the specified address.
+    pub fn listen<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), Error> {
 
-    ) -> Result<(), Error> {
+        if self.socket.is_none() {
 
-        // Store bound socket address
-        let local_addr = try!(socket.local_addr());
-        self.local_address = Some(local_addr);
+            let local_addr = try!(addr.to_socket_addrs()).nth(0).unwrap();
+            let socket = try!(S::new(
+                local_addr,
+                self.config.packet_max_size
+            ));
 
-        // Reset stats
-        self.statistics.reset();
+            self.socket = Some(socket);
+            self.local_address = Some(local_addr);
+            self.should_receive = true;
 
-        // List of dropped connections
-        let mut dropped: Vec<ConnectionID> = Vec::new();
+            Ok(())
 
-        // Mappping of connections to their remote sender address
-        let mut addresses: HashMap<ConnectionID, SocketAddr> = HashMap::new();
+        } else {
+            Err(Error::new(ErrorKind::AlreadyExists, ""))
+        }
 
-        // Mapping of the actual connection objects
-        let mut connections: HashMap<ConnectionID, Connection> = HashMap::new();
+    }
 
-        // Invoke handler
-        handler.bind(self);
+    /// Accepts new incoming client connections from the server's underlying
+    /// server and receives and returns messages from them.
+    pub fn accept_receive(&mut self) -> Result<ServerEvent, TryRecvError> {
 
-        // Receive and send until we shut down.
-        let mut tick_overflow = 0;
-        while !self.closed {
+        if self.socket.is_none() {
+            Err(TryRecvError::Disconnected)
 
-            let tick_start = tick::start();
-            let tick_delay = 1000000000 / self.config.send_rate;
+        } else {
 
-            // Receive all incoming UDP packets to our local address
-            let mut bytes_received = 0;
-            while let Ok((addr, packet)) = socket.try_recv() {
+            if self.should_receive {
 
-                // Try to extract the connection id from the packet
-                if let Some(id) = Connection::id_from_packet(&self.config, &packet) {
+                self.ticker.begin_tick();
 
-                    // Retrieve or create a connection for the current
-                    // connection id
-                    let connection = connections.entry(id).or_insert_with(|| {
+                let local_address = self.local_address.unwrap();
+
+                // Receive all incoming UDP packets to our local address
+                let mut bytes_received = 0;
+                while let Ok((addr, packet)) = self.socket.as_mut().unwrap().try_recv() {
+
+                    // Try to extract the connection id from the packet
+                    if let Some(id) = Connection::<R, M>::id_from_packet(&self.config, &packet) {
+
+                        // TODO optimize unnecessary copying
+                        let config = self.config;
+
+                        // Retrieve or create a connection for the current
+                        // connection id
+                        let mut inserted_address: Option<SocketAddr> = None;
+                        let connection = self.connections.entry(id).or_insert_with(|| {
+
+                            let mut conn = Connection::new(
+                                config,
+                                local_address,
+                                addr,
+                                R::new(config),
+                                M::new(config)
+                            );
+
+                            inserted_address = Some(addr);
+                            conn.set_id(id);
+                            conn
+
+                        });
 
                         // Also map the intitial address which is used by
                         // the connection
-                        addresses.insert(id, addr);
+                        if let Some(addr) = inserted_address.take() {
+                            self.addresses.insert(id, addr);
+                        }
 
-                        let mut conn = Connection::new(
-                            self.config,
-                            local_addr,
-                            addr,
-                            handler.rate_limiter(&self.config)
-                        );
+                        // Map the current remote address of the connection to
+                        // the latest address that sent a packet for the
+                        // connection id in question. This is done in order to
+                        // work in situations were the remote port of a
+                        // connection is switched around by NAT.
+                        if addr != connection.peer_addr() {
+                            // TODO verify packet sequence, only newer packets should be allowed up
+                            // update the peer address
+                            connection.set_peer_addr(addr);
+                            self.addresses.remove(&id);
+                            self.addresses.insert(id, addr);
+                        }
 
-                        conn.set_id(id);
-                        conn
+                        // Update server statistics
+                        bytes_received += packet.len();
 
-                    });
+                        // Then feed the packet into the connection object for
+                        // parsing
+                        connection.receive_packet(packet);
 
-                    // Map the current remote address of the connection to
-                    // the latest address that sent a packet for the
-                    // connection id in question. This is done in order to
-                    // work in situations were the remote port of a
-                    // connection is switched around by NAT.
-                    if addr != connection.peer_addr() {
-                        connection.set_peer_addr(addr);
-                        addresses.remove(&id);
-                        addresses.insert(id, addr);
+                        // Map any connection events
+                        map_connection_events(&mut self.events, connection);
+
                     }
-
-                    // Statistics
-                    bytes_received += packet.len();
-
-                    // Then feed the packet into the connection object for
-                    // parsing
-                    connection.receive_packet(
-                        packet, tick_delay / 1000000, self, handler
-                    );
 
                 }
 
+                self.stats_collector.set_bytes_received(bytes_received as u32);
+                self.should_receive = false;
+
             }
 
-            self.statistics.set_bytes_received(bytes_received as u32);
+            if let Some(event) = self.events.pop_front() {
+                Ok(event)
 
-            // Invoke handler
-            handler.tick_connections(self, &mut connections);
+            } else {
+                Err(TryRecvError::Empty)
+            }
+
+        }
+
+    }
+
+    /// Sends all queued messages to the server's underlying client connections.
+    ///
+    /// If `auto_tick` is specified as `true` this method will block the
+    /// current thread for the amount of time which is required to limit the
+    /// number of calls per second (when called inside a loop) to the server's
+    /// configured `send_rate`.
+    pub fn send(&mut self, auto_tick: bool) -> Result<(), Error> {
+        if self.socket.is_some() {
+
+            // List of dropped connections
+            let mut dropped: Vec<ConnectionID> = Vec::new();
 
             // Create outgoing packets for all connections
             let mut bytes_sent = 0;
-            for (id, conn) in &mut connections {
+            for (id, connection) in &mut self.connections {
 
                 // Resolve the last known remote address for this
                 // connection and send the data
-                let addr = &addresses[id];
+                let addr = &self.addresses[id];
 
                 // Then invoke the connection to send a outgoing packet
-                bytes_sent += conn.send_packet(&mut socket, addr, self, handler);
+                bytes_sent += connection.send_packet(
+                    self.socket.as_mut().unwrap(),
+                    addr
+                );
 
                 // Collect all lost / closed connections
-                if !conn.open() {
+                if !connection.open() {
+                    // Map any remaining connection events
+                    map_connection_events(&mut self.events, connection);
                     dropped.push(*id);
                 }
 
             }
 
-            // Update statistics
-            self.statistics.set_bytes_sent(bytes_sent);
-            self.statistics.tick();
-
             // Remove any dropped connections and their address mappings
-            for id in dropped.drain(..) {
-                connections.remove(&id).unwrap().reset();
-                addresses.remove(&id);
+            for id in dropped {
+                self.connections.remove(&id).unwrap().reset();
+                self.addresses.remove(&id);
             }
 
-            tick::end(tick_delay, tick_start, &mut tick_overflow, &self.config);
+            self.stats_collector.set_bytes_sent(bytes_sent);
+            self.stats_collector.tick();
+            self.stats = self.stats_collector.average();
 
-        }
+            self.should_receive = true;
 
-        // Invoke handler
-        handler.shutdown(self);
+            if auto_tick {
+                self.ticker.end_tick();
+            }
 
-        // Reset socket address
-        self.local_address = None;
-
-        // Reset all connection states
-        for (_, conn) in &mut connections {
-            conn.reset();
-        }
-
-        Ok(())
-
-    }
-
-    /// Shuts down the server, closing all active client connections.
-    ///
-    /// This exits the tick loop, resets all connections and shuts down the
-    /// underlying socket the server was bound to.
-    pub fn shutdown(&mut self) -> Result<(), Error> {
-        if self.closed {
-            Err(Error::new(ErrorKind::NotConnected, ""))
+            Ok(())
 
         } else {
-            self.closed = true;
-            Ok(())
+            Err(Error::new(ErrorKind::NotConnected, ""))
         }
     }
 
+    /// Shuts down all of the server's client connections, clearing any state
+    /// and freeing the server's socket.
+    pub fn shutdown(&mut self) -> Result<(), Error> {
+        if self.socket.is_some() {
+            self.should_receive = false;
+            self.stats_collector.reset();
+            self.stats.reset();
+            self.events.clear();
+            self.connections.clear();
+            self.addresses.clear();
+            self.ticker.reset();
+            self.local_address = None;
+            self.socket = None;
+            Ok(())
+
+        } else {
+            Err(Error::new(ErrorKind::NotConnected, ""))
+        }
+    }
+
+}
+
+// Helpers --------------------------------------------------------------------
+fn map_connection_events<R: RateLimiter, M: PacketModifier>(
+    server_events: &mut VecDeque<ServerEvent>,
+    connection: &mut Connection<R, M>
+) {
+    let id = connection.id();
+    for event in connection.events() {
+        server_events.push_back(match event {
+            ConnectionEvent::Connected => ServerEvent::Connection(id),
+            ConnectionEvent::Lost => ServerEvent::ConnectionLost(id),
+            ConnectionEvent::Failed => unreachable!(),
+            ConnectionEvent::Closed(p) => ServerEvent::ConnectionClosed(id, p),
+            ConnectionEvent::Message(payload) => ServerEvent::Message(id, payload),
+            ConnectionEvent::CongestionStateChanged(c) => ServerEvent::ConnectionCongestionStateChanged(id, c),
+            ConnectionEvent::PacketLost(payload) => ServerEvent::PacketLost(id, payload)
+        })
+    }
 }
 
