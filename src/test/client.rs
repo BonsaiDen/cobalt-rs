@@ -555,9 +555,6 @@ fn test_client_close_by_remote() {
 #[test]
 fn test_client_close_by_local() {
 
-    // TODO support closing the connection locally
-
-    /*
     let mut client = client_init(Config::default());
     let id = client.connection().unwrap().id().0;
     client.socket().unwrap().mock_receive(vec![
@@ -577,27 +574,45 @@ fn test_client_close_by_local() {
         ClientEvent::Connection
     ]);
 
-    // TODO Close connection
-    client.
-
-    // Receive closure packet
-    client.socket().unwrap().mock_receive(vec![
-        ("255.1.1.1:5678", vec![
+    client.socket().unwrap().assert_sent(vec![
+        ("255.1.1.1:5678", [
             1, 2, 3, 4,
             (id >> 24) as u8,
             (id >> 16) as u8,
             (id >> 8) as u8,
              id as u8,
-            0, 128, // Most distant sequence numbers
-            85, 85, 85, 85 // ack bitfield with every second bit set
-        ])
+            1,
+            0,
+            0, 0, 0, 0
+
+        ].to_vec())
     ]);
 
-    // Expect closure by remote
-    assert_eq!(client_events(&mut client), vec![
-        ClientEvent::ConnectionClosed(true)
+    // Close connection
+    client.connection().unwrap().close();
+
+    // Expect closure packet to be sent
+    client.send(false).ok();
+    client.socket().unwrap().assert_sent(vec![
+        ("255.1.1.1:5678", [
+            1, 2, 3, 4,
+            (id >> 24) as u8,
+            (id >> 16) as u8,
+            (id >> 8) as u8,
+             id as u8,
+            0,
+            128,
+            85, 85, 85, 85
+
+        ].to_vec())
     ]);
-    */
+
+    // Expect connection to be dropped after closing threshold
+    thread::sleep(Duration::from_millis(165));
+    assert_eq!(client_events(&mut client), vec![
+        ClientEvent::ConnectionClosed(false)
+    ]);
+
 }
 
 #[test]
