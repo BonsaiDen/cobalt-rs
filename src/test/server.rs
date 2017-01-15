@@ -144,21 +144,6 @@ fn test_server_flush_without_delay() {
 }
 
 #[test]
-fn test_server_flush_auto_delay() {
-
-    let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
-    server.listen("127.0.0.1:1234").ok();
-
-    let start = Instant::now();
-    for _ in 0..5 {
-        server.accept_receive().ok();
-        server.send(true).ok();
-    }
-    assert_millis_since!(start, 167, 33);
-
-}
-
-#[test]
 fn test_server_connection() {
 
     let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
@@ -585,6 +570,23 @@ fn test_server_connection_loss() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_server_flush_auto_delay() {
+
+    let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    server.listen("127.0.0.1:1234").ok();
+
+    let start = Instant::now();
+    for _ in 0..5 {
+        server.accept_receive().ok();
+        server.send(true).ok();
+    }
+    assert_millis_since!(start, 167, 33);
+
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn test_server_auto_delay_with_load() {
 
     let mut server = Server::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());

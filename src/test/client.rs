@@ -147,21 +147,6 @@ fn test_client_flush_without_delay() {
 }
 
 #[test]
-fn test_client_flush_auto_delay() {
-
-    let mut client = Client::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
-    client.connect("255.1.1.1:5678").ok();
-
-    let start = Instant::now();
-    for _ in 0..5 {
-        client.receive().ok();
-        client.send(true).ok();
-    }
-    assert_millis_since!(start, 167, 33);
-
-}
-
-#[test]
 fn test_client_connection_failure() {
 
     let mut client = client_init(Config {
@@ -616,6 +601,23 @@ fn test_client_close_by_local() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_client_flush_auto_delay() {
+
+    let mut client = Client::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
+    client.connect("255.1.1.1:5678").ok();
+
+    let start = Instant::now();
+    for _ in 0..5 {
+        client.receive().ok();
+        client.send(true).ok();
+    }
+    assert_millis_since!(start, 167, 33);
+
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn test_client_auto_delay_with_load() {
 
     let mut client = Client::<MockSocket, BinaryRateLimiter, NoopPacketModifier>::new(Config::default());
