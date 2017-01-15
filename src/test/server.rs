@@ -520,7 +520,7 @@ fn test_server_connection_close() {
     assert_eq!(server_events(&mut server), vec![]);
 
     // Expect connection to be dropped after closing threshold
-    thread::sleep(Duration::from_millis(200));
+    thread::sleep(Duration::from_millis(165));
     assert_eq!(server_events(&mut server), vec![
         ServerEvent::ConnectionClosed(ConnectionID(84214017), false)
     ]);

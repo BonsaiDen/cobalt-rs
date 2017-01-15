@@ -38,6 +38,10 @@ pub struct Config {
     /// connection gets dropped. Default is `1000`.
     pub connection_drop_threshold: Duration,
 
+    /// Maximum time in milliseconds to wait for remote confirmation after
+    /// programmatically closing a connection. Default is `150`.
+    pub connection_closing_threshold: Duration,
+
     /// The percent of available packet bytes to use when serializing
     /// `MessageKind::Instant` into a packet via a `MessageQueue`.
     pub message_quota_instant: f32,
@@ -98,6 +102,7 @@ impl Default for Config {
             packet_drop_threshold: Duration::from_millis(1000),
             connection_init_threshold: Duration::from_millis(100),
             connection_drop_threshold: Duration::from_millis(1000),
+            connection_closing_threshold: Duration::from_millis(150),
             message_quota_instant: 60.0,
             message_quota_reliable: 20.0,
             message_quota_ordered: 20.0,

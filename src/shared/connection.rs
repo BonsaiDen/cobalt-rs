@@ -177,10 +177,6 @@ pub struct Connection<R: RateLimiter, M: PacketModifier> {
     /// Number of all packets sent which were lost
     acked_packets: u32,
 
-    /// Maximum time in milliseconds to wait for a remote response once the
-    /// connection has entered the closing state
-    closing_threshold: Duration,
-
     /// The internal message queue of the connection
     message_queue: MessageQueue,
 
@@ -243,7 +239,6 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             recv_packets: 0,
             acked_packets: 0,
             lost_packets: 0,
-            closing_threshold: Duration::from_millis(1000 / config.send_rate * 5),
             message_queue: MessageQueue::new(config),
             rate_limiter: rate_limiter,
             packet_modifier: packet_modifier,
@@ -353,7 +348,6 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     /// Overrides the connection's existing configuration.
     pub fn set_config(&mut self, config: Config) {
         self.config = config;
-        self.closing_threshold = Duration::from_millis(1000 / config.send_rate * 5);
         self.message_queue.set_config(config);
     }
 
@@ -645,7 +639,6 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
     /// Closes the connection, no further packets will be received or send.
     pub fn close(&mut self) {
-        self.config.connection_drop_threshold = self.closing_threshold;
         self.state = ConnectionState::Closing;
     }
 
@@ -742,7 +735,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             ConnectionState::Closing => {
 
                 // Detect connection closure
-                if inactive_time > self.config.connection_drop_threshold {
+                if inactive_time > self.config.connection_closing_threshold {
                     self.state = ConnectionState::Closed;
                     self.events.push(ConnectionEvent::Closed(false));
                     false
