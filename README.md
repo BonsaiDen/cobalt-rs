@@ -5,7 +5,7 @@ connections over UDP](http://gafferongames.com/networking-for-game-programmers/u
 with an included message layer supporting both unreliable messaging and reliable 
 messages with optional in-order delivery. 
 
-- [Documentation](https://bonsaiden.github.io/cobalt-rs/doc/cobalt/) for the latest stable release.
+- [Documentation](https://bonsaiden.github.io/cobalt-rs/cobalt/index.html) for the latest master build.
 
 
 ## Usage
