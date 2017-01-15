@@ -1,4 +1,14 @@
+sudo: false
 language: rust
+
+addons:
+  apt:
+    packages:
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - binutils-dev # optional: only required for the --verify flag of coveralls
+
 rust:
   - stable
   - beta
@@ -10,6 +20,33 @@ matrix:
   include:
     - rust: nightly
 
+# load travis-cargo
+before_script:
+  - |
+      pip install 'travis-cargo<0.2' --user &&
+      export PATH=$HOME/.local/bin:$PATH
+
+# the main build
 script:
-  - cargo build --verbose
-  - cargo test --verbose
+  - |
+      travis-cargo build &&
+      travis-cargo test &&
+      travis-cargo bench &&
+      travis-cargo --only stable doc
+
+after_success:
+  # upload the documentation from the build with stable (automatically only actually
+  # runs on the master branch, not individual PRs)
+  - travis-cargo --only stable doc-upload
+  # measure code coverage and upload to coveralls.io (the verify
+  # argument mitigates kcov crashes due to malformed debuginfo, at the
+  # cost of some speed <https://github.com/huonw/travis-cargo/issues/12>)
+  - travis-cargo coveralls --no-sudo --verify
+
+env:
+  global:
+    # override the default `--features unstable` used for the nightly branch (optional)
+    - TRAVIS_CARGO_NIGHTLY_FEATURE=nightly
+    # encrypted github token for doc upload (see `GH_TOKEN` link above)
+    - secure: djlxUOb/Am51vc3z7RewDLAm631Xe1Qxip1Y2ZZuSRyPmr3Bmitk9VAFa0N7twA9VplvCs2Qjq4ChW7JRdgd7zngSDzagmI/RKhcq5hp0+ZS2gimTe56Y19wGB8PLB/mK4+7EdBK8HmBO00/2zoNrnN9tmxID5iHhWyu/VDhbs11ND+Mxwu1zy5Aw3U/YHfAJwxFD/alIRW4SA+3WSgOJ3liJMR4dxUxTonHbKXTyJzPiPeS6djUSMrNDfvyNzDPYoM4aRHNb/EZTQ65oYp7wy4Iesni1r+wTrOgfsuuMXg7xbEEKmbLPoEyIeCm3JBV0j7j+I1fZF3MoiI4CSEa7ZNrT4GHHv+C1LXVjAPGCwMmCp0GJ0ZG4DlcNeAFJhwN32k6vKV8agQwImdMP85TAq/lKBKGEA4tFGMqoZ/sodazSIfPbW9aVFvpiT98MBlrjzUvzjIBJtSNtpsyNpuAT9rvrtue5mIVPOPu/ziCwZ5xl8SijzQgkaRKjBtmd3NLNakzHfZz3t6fUHnBNLWKCp9SOSSkjj0owgy3LIGyfbKhX6UAy9ROjbsGeIXgDskeyPi1bvZdTyu1R1fe18ZoKyUuNmld5wb3CyzSX6d9SakI05Wsptyt2TQkIA7uCercsZ0YvTgX4TwmSznAMVkiu67GFDsKTQf+HXouzVk1MvM=
+
