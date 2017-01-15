@@ -91,8 +91,7 @@ fn test_server_disconnected() {
     assert_eq!(server.connections().len(), 0);
 
     assert_eq!(server.accept_receive(), Err(TryRecvError::Disconnected));
-    assert_eq!(server.send(&conn_id, MessageKind::Instant, Vec::new()).unwrap_err().kind(), ErrorKind::NotConnected);
-    assert_eq!(server.flush(false).unwrap_err().kind(), ErrorKind::NotConnected);
+    assert_eq!(server.send(false).unwrap_err().kind(), ErrorKind::NotConnected);
     assert_eq!(server.shutdown().unwrap_err().kind(), ErrorKind::NotConnected);
 
 }
@@ -123,7 +122,7 @@ fn test_server_flow_without_connections() {
 
     assert_eq!(server.accept_receive(), Err(TryRecvError::Empty));
 
-    assert!(server.flush(false).is_ok());
+    assert!(server.send(false).is_ok());
 
     assert!(server.shutdown().is_ok());
 
@@ -138,7 +137,7 @@ fn test_server_flush_without_delay() {
     let start = Instant::now();
     for _ in 0..5 {
         server.accept_receive().ok();
-        server.flush(false).ok();
+        server.send(false).ok();
     }
     assert_millis_since!(start, 0, 16);
 
@@ -153,7 +152,7 @@ fn test_server_flush_auto_delay() {
     let start = Instant::now();
     for _ in 0..5 {
         server.accept_receive().ok();
-        server.flush(true).ok();
+        server.send(true).ok();
     }
     assert_millis_since!(start, 167, 33);
 
@@ -253,7 +252,7 @@ fn test_server_reset_events() {
 
     // Fetch events from the connections
     server.accept_receive().ok();
-    server.flush(false).ok();
+    server.send(false).ok();
 
     // Shutdown should clear events
     server.shutdown().ok();
@@ -287,25 +286,22 @@ fn test_server_send() {
 
     assert!(server.connection(&ConnectionID(1)).is_err());
 
-    // Send via server
-    server.send(&ConnectionID(151521030), MessageKind::Instant, b"Foo".to_vec()).ok();
-    assert!(server.send(&ConnectionID(0), MessageKind::Instant, b"Foo".to_vec()).is_err());
-
     // Send via connection handle
+    server.connection(&ConnectionID(151521030)).unwrap().send(MessageKind::Instant, b"Foo".to_vec());
     server.connection(&ConnectionID(151521030)).unwrap().send(MessageKind::Instant, b"Bar".to_vec());
 
     // Check connections map entries
     assert_eq!(server.connections().keys().collect::<Vec<&ConnectionID>>(), vec![&ConnectionID(151521030)]);
 
-    // Stats should not be updated before flush is called
+    // Stats should not be updated before send is called
     assert_eq!(server.bytes_sent(), 0);
     assert_eq!(server.bytes_received(), 0);
 
-    // No messages should be send before flush is called
+    // No messages should be send before send is called
     server.socket().unwrap().assert_sent_none();
 
-    // Both messages should be send after the flush call
-    server.flush(false).ok();
+    // Both messages should be send after the send call
+    server.send(false).ok();
     server.socket().unwrap().assert_sent(vec![("255.1.1.1:1000", [
         1, 2, 3, 4,
         9, 8, 7, 6,
@@ -317,7 +313,7 @@ fn test_server_send() {
 
     ].to_vec())]);
 
-    // Stats should be updated after flush call
+    // Stats should be updated after send call
     assert_eq!(server.bytes_sent(), 28);
     assert_eq!(server.bytes_received(), 14);
 
@@ -335,13 +331,13 @@ fn test_server_send() {
     server.accept_receive().ok();
 
     // Send to new address
-    server.send(&ConnectionID(151521030), MessageKind::Instant, b"Baz".to_vec()).ok();
+    server.connection(&ConnectionID(151521030)).unwrap().send(MessageKind::Instant, b"Baz".to_vec());
 
     // Check connections map entries
     assert_eq!(server.connections().keys().collect::<Vec<&ConnectionID>>(), vec![&ConnectionID(151521030)]);
 
     // Message should be send to the new address of the connection
-    server.flush(false).ok();
+    server.send(false).ok();
     server.socket().unwrap().assert_sent(vec![
         ("255.1.1.2:1001", [
             1, 2, 3, 4,
@@ -528,8 +524,8 @@ fn test_server_connection_close() {
         ServerEvent::ConnectionClosed(ConnectionID(151521030), true)
     ]);
 
-    // Connection should be removed after next flush call
-    server.flush(false).ok();
+    // Connection should be removed after next send call
+    server.send(false).ok();
     assert!(server.connection(&ConnectionID(151521030)).is_err());
 
     // Close via connection handle
@@ -581,7 +577,7 @@ fn test_server_connection_loss() {
     assert!(server.connection(&ConnectionID(151521030)).is_err());
     assert_eq!(server.connections().len(), 0);
 
-    server.flush(false).ok();
+    server.send(false).ok();
 
     // We expect no additional packets to be send once the connection was lost
     server.socket().unwrap().assert_sent_none();
@@ -598,7 +594,7 @@ fn test_server_auto_delay_with_load() {
     let start = Instant::now();
     for _ in 0..10 {
         server.accept_receive().ok();
-        server.flush(true).ok();
+        server.send(true).ok();
     }
 
     assert_millis_since!(start, 330, 16);
@@ -608,7 +604,7 @@ fn test_server_auto_delay_with_load() {
     for _ in 0..10 {
         server.accept_receive().ok();
         thread::sleep(Duration::from_millis(10));
-        server.flush(true).ok();
+        server.send(true).ok();
     }
 
     assert_millis_since!(start, 330, 16);
@@ -618,7 +614,7 @@ fn test_server_auto_delay_with_load() {
     for _ in 0..10 {
         server.accept_receive().ok();
         thread::sleep(Duration::from_millis(20));
-        server.flush(true).ok();
+        server.send(true).ok();
     }
 
     assert_millis_since!(start, 330, 16);
@@ -631,7 +627,7 @@ fn test_server_auto_delay_with_load() {
 
 // Helpers --------------------------------------------------------------------
 fn server_events(server: &mut Server<MockSocket, BinaryRateLimiter, NoopPacketModifier>) -> Vec<ServerEvent> {
-    server.flush(false).ok();
+    server.send(false).ok();
     let mut events = Vec::new();
     while let Ok(event) = server.accept_receive() {
         events.push(event);

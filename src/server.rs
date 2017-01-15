@@ -19,7 +19,6 @@ use shared::ticker::Ticker;
 use super::{
     Config,
     ConnectionID, Connection, ConnectionEvent,
-    MessageKind,
     RateLimiter, PacketModifier, Socket
 };
 
@@ -76,10 +75,10 @@ pub enum ServerEvent {
 ///         conn.send(MessageKind::Instant, b"Ping".to_vec());
 ///     }
 ///
-///     // Flush all pending outgoing messages.
+///     // Send all pending outgoing messages.
 ///     //
 ///     // Also auto delay the current thread to achieve the configured tick rate.
-///     server.flush(false).is_ok();
+///     server.send(false).is_ok();
 ///
 /// // }
 ///
@@ -301,30 +300,13 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
     }
 
-    /// Queues a message of the specified `kind` along with its `payload` to
-    /// be send to the specified client connection with the next `flush` call.
-    pub fn send(&mut self, id: &ConnectionID, kind: MessageKind, payload: Vec<u8>) -> Result<(), Error> {
-        if self.socket.is_some() {
-            if let Some(conn) = self.connections.get_mut(id) {
-                conn.send(kind, payload);
-                Ok(())
-
-            } else {
-                Err(Error::new(ErrorKind::NotFound, ""))
-            }
-
-        } else {
-            Err(Error::new(ErrorKind::NotConnected, ""))
-        }
-    }
-
     /// Sends all queued messages to the server's underlying client connections.
     ///
-    /// If `auto_delay` is specified as `true` this method will block the
+    /// If `auto_tick` is specified as `true` this method will block the
     /// current thread for the amount of time which is required to limit the
     /// number of calls per second (when called inside a loop) to the server's
     /// configured `send_rate`.
-    pub fn flush(&mut self, auto_delay: bool) -> Result<(), Error> {
+    pub fn send(&mut self, auto_tick: bool) -> Result<(), Error> {
         if self.socket.is_some() {
 
             // List of dropped connections
@@ -365,7 +347,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
             self.should_receive = true;
 
-            if auto_delay {
+            if auto_tick {
                 self.ticker.end_tick();
             }
 

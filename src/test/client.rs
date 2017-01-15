@@ -89,8 +89,7 @@ fn test_client_disconnected() {
     assert_eq!(client.connection().unwrap_err().kind(), ErrorKind::NotConnected);
 
     assert_eq!(client.receive(), Err(TryRecvError::Disconnected));
-    assert_eq!(client.send(MessageKind::Instant, Vec::new()).unwrap_err().kind(), ErrorKind::NotConnected);
-    assert_eq!(client.flush(false).unwrap_err().kind(), ErrorKind::NotConnected);
+    assert_eq!(client.send(false).unwrap_err().kind(), ErrorKind::NotConnected);
     assert_eq!(client.reset().unwrap_err().kind(), ErrorKind::NotConnected);
     assert_eq!(client.close().unwrap_err().kind(), ErrorKind::NotConnected);
 
@@ -126,7 +125,7 @@ fn test_client_without_connection() {
 
     assert_eq!(client.receive(), Err(TryRecvError::Empty));
 
-    assert!(client.flush(false).is_ok());
+    assert!(client.send(false).is_ok());
 
     assert!(client.close().is_ok());
 
@@ -141,7 +140,7 @@ fn test_client_flush_without_delay() {
     let start = Instant::now();
     for _ in 0..5 {
         client.receive().ok();
-        client.flush(false).ok();
+        client.send(false).ok();
     }
     assert_millis_since!(start, 0, 16);
 
@@ -156,7 +155,7 @@ fn test_client_flush_auto_delay() {
     let start = Instant::now();
     for _ in 0..5 {
         client.receive().ok();
-        client.flush(true).ok();
+        client.send(true).ok();
     }
     assert_millis_since!(start, 167, 33);
 
@@ -176,8 +175,8 @@ fn test_client_connection_failure() {
     let events = client_events(&mut client);
     assert_eq!(events, vec![ClientEvent::ConnectionFailed]);
 
-    client.flush(false).ok();
-    client.flush(false).ok();
+    client.send(false).ok();
+    client.send(false).ok();
 
     // We expect no additional packets to be send once the connection failed
     client.socket().unwrap().assert_sent_none();
@@ -210,8 +209,8 @@ fn test_client_connection_success() {
     assert_eq!(client.bytes_sent(), 28);
     assert_eq!(client.bytes_received(), 0);
 
-    // Flush again to update states
-    client.flush(true).ok();
+    // Send again to update states
+    client.send(true).ok();
 
     assert_eq!(client.bytes_sent(), 42);
     assert_eq!(client.bytes_received(), 14);
@@ -241,7 +240,7 @@ fn test_client_reset_events() {
 
     // Fetch events from the connection
     client.receive().ok();
-    client.flush(false).ok();
+    client.send(false).ok();
 
     // Reset events
     client.reset().ok();
@@ -262,7 +261,7 @@ fn test_client_reset_events() {
 
     // Fetch events from the connection
     client.receive().ok();
-    client.flush(false).ok();
+    client.send(false).ok();
 
     // Close and clear events
     client.close().ok();
@@ -337,8 +336,8 @@ fn test_client_connection_loss_and_reconnect() {
 
     assert_eq!(client_events(&mut client), vec![ClientEvent::ConnectionLost]);
 
-    client.flush(false).ok();
-    client.flush(false).ok();
+    client.send(false).ok();
+    client.send(false).ok();
 
     // We expect no additional packets to be send once the connection failed
     client.socket().unwrap().assert_sent_none();
@@ -401,10 +400,10 @@ fn test_client_send() {
 
     assert_eq!(client_events(&mut client), vec![ClientEvent::Connection]);
 
-    // States should not be updated before the next flush() call
+    // States should not be updated before the next send() call
     assert_eq!(client.bytes_sent(), 28);
     assert_eq!(client.bytes_received(), 0);
-    client.flush(false).ok();
+    client.send(false).ok();
 
     assert_eq!(client.bytes_sent(), 42);
     assert_eq!(client.bytes_received(), 14);
@@ -430,13 +429,13 @@ fn test_client_send() {
     ]);
 
     // Send messages to server
-    client.send(MessageKind::Instant, b"Foo".to_vec()).ok();
-    client.send(MessageKind::Reliable, b"Bar".to_vec()).ok();
+    client.connection().unwrap().send(MessageKind::Instant, b"Foo".to_vec());
+    client.connection().unwrap().send(MessageKind::Reliable, b"Bar".to_vec());
 
-    // Packets should not be send before the next flush() call
+    // Packets should not be send before the next send() call
     client.socket().unwrap().assert_sent_none();
 
-    client.flush(false).ok();
+    client.send(false).ok();
     client.socket().unwrap().assert_sent(vec![
         ("255.1.1.1:5678", [
             1, 2, 3, 4,
@@ -484,10 +483,10 @@ fn test_client_receive() {
         ClientEvent::Message(b"Bar".to_vec())
     ]);
 
-    // Stats should not be updated before next flush() call
+    // Stats should not be updated before next send() call
     assert_eq!(client.bytes_received(), 0);
 
-    client.flush(false).ok();
+    client.send(false).ok();
     assert_eq!(client.bytes_received(), 28);
 
     // Ignore duplicates
@@ -626,7 +625,7 @@ fn test_client_auto_delay_with_load() {
     let start = Instant::now();
     for _ in 0..10 {
         client.receive().ok();
-        client.flush(true).ok();
+        client.send(true).ok();
     }
 
     assert_millis_since!(start, 330, 16);
@@ -636,7 +635,7 @@ fn test_client_auto_delay_with_load() {
     for _ in 0..10 {
         client.receive().ok();
         thread::sleep(Duration::from_millis(10));
-        client.flush(true).ok();
+        client.send(true).ok();
     }
 
     assert_millis_since!(start, 330, 16);
@@ -646,7 +645,7 @@ fn test_client_auto_delay_with_load() {
     for _ in 0..10 {
         client.receive().ok();
         thread::sleep(Duration::from_millis(20));
-        client.flush(true).ok();
+        client.send(true).ok();
     }
 
     assert_millis_since!(start, 330, 16);
@@ -665,7 +664,7 @@ fn client_init(config: Config) -> Client<MockSocket, BinaryRateLimiter, NoopPack
 
     // Verify initial connection packet
     let id = client.connection().unwrap().id().0;
-    client.flush(false).ok();
+    client.send(false).ok();
     client.socket().unwrap().assert_sent(vec![
         ("255.1.1.1:5678", [
             1, 2, 3, 4,
@@ -685,7 +684,7 @@ fn client_init(config: Config) -> Client<MockSocket, BinaryRateLimiter, NoopPack
 }
 
 fn client_events(client: &mut Client<MockSocket, BinaryRateLimiter, NoopPacketModifier>) -> Vec<ClientEvent> {
-    client.flush(false).ok();
+    client.send(false).ok();
     let mut events = Vec::new();
     while let Ok(event) = client.receive() {
         events.push(event);
