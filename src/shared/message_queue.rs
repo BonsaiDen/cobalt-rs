@@ -40,11 +40,7 @@ pub enum MessageKind {
     /// , the remote queue will buffer the second message until the first one
     /// arrives and then make both of them available to the application at
     /// once.
-    Ordered = 2,
-
-    /// Invalid message which for some reason could not be parsed correctly
-    /// from the available packet data.
-    Invalid = 3
+    Ordered = 2
 }
 
 /// Structure for handling messages inside a `MessageQueue` with support for
@@ -184,8 +180,7 @@ impl MessageQueue {
                     self.local_order_id = 0;
                 }
 
-            },
-            MessageKind::Invalid => {}
+            }
         }
 
     }
@@ -251,8 +246,7 @@ impl MessageQueue {
                 MessageKind::Instant | MessageKind::Reliable => {
                     self.recv_queue.push_back(m);
                 },
-                MessageKind::Ordered => self.receive_ordered_message(m),
-                MessageKind::Invalid => { /* ignore all other messages */ }
+                MessageKind::Ordered => self.receive_ordered_message(m)
             }
         }
     }
@@ -264,8 +258,8 @@ impl MessageQueue {
     pub fn lost_packet(&mut self, packet: &[u8]) {
         for m in messages_from_packet(packet) {
             match m.kind {
-                MessageKind::Instant | MessageKind::Invalid => {
-                    // ignore lost instant / invalid messages
+                MessageKind::Instant => {
+                    // ignore lost instant messages
                 },
                 MessageKind::Reliable => self.r_queue.push_front(m),
                 MessageKind::Ordered => self.o_queue.push_front(m)
@@ -374,27 +368,29 @@ fn messages_from_packet(packet: &[u8]) -> Vec<Message> {
         let size_high = (packet[index + 2] as u16) << 8;
         let size = size_high | packet[index + 3] as u16;
 
-        // Read available data
-        messages.push(Message {
+        // Lower 4 bits of byte 0 are the MessageKind
+        let kind = match packet[index] & 0x0F {
+            0 => Some(MessageKind::Instant),
+            1 => Some(MessageKind::Reliable),
+            2 => Some(MessageKind::Ordered),
+            _ => None
+        };
 
-            // Lower 4 bits of byte 0 are the MessageKind
-            kind: match packet[index] & 0x0F {
-                0 => MessageKind::Instant,
-                1 => MessageKind::Reliable,
-                2 => MessageKind::Ordered,
-                _ => MessageKind::Invalid
-            },
+        // Ignore any unknown message kind
+        if let Some(kind) = kind {
+            messages.push(Message {
+                kind: kind,
+                order: order_high | order_low,
+                size: size,
+                data: packet[
+                    index + MESSAGE_HEADER_BYTES..cmp::min(
+                        index + MESSAGE_HEADER_BYTES + size as usize,
+                        available
+                    )
+                ].to_vec()
 
-            order: order_high | order_low,
-            size: size,
-            data: packet[
-                index + MESSAGE_HEADER_BYTES..cmp::min(
-                    index + MESSAGE_HEADER_BYTES + size as usize,
-                    available
-                )
-            ].to_vec()
-
-        });
+            });
+        }
 
         index += size as usize + MESSAGE_HEADER_BYTES;
 

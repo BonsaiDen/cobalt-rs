@@ -289,6 +289,7 @@ fn test_server_send() {
 
     // Send via server
     server.send(&ConnectionID(151521030), MessageKind::Instant, b"Foo".to_vec()).ok();
+    assert!(server.send(&ConnectionID(0), MessageKind::Instant, b"Foo".to_vec()).is_err());
 
     // Send via connection handle
     server.connection(&ConnectionID(151521030)).unwrap().send(MessageKind::Instant, b"Bar".to_vec());

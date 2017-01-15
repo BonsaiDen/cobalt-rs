@@ -170,11 +170,11 @@ impl RateLimiter for BinaryRateLimiter {
 }
 
 fn time_since(i: &Instant) -> u64 {
-    nanos_from_duration(i.elapsed())
+    millis_from_duration(i.elapsed())
 }
 
-fn nanos_from_duration(d: Duration) -> u64 {
-    d.as_secs() * 1000 * 1000000 + d.subsec_nanos() as u64
+fn millis_from_duration(d: Duration) -> u64 {
+    d.as_secs() * 1000 + (d.subsec_nanos() as u64 / 1000000)
 }
 
 #[cfg(test)]
@@ -224,7 +224,7 @@ mod test {
         assert_eq!(rl.should_send(), true);
 
         // Sleep until the limiter will transition back into good mode
-        thread::sleep(Duration::from_millis(1100));
+        thread::sleep(Duration::from_millis(2100));
         rl.update(12, 0.0);
         assert_eq!(rl.congested(), false);
         assert_eq!(rl.should_send(), true);

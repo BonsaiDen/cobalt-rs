@@ -18,7 +18,6 @@
 //! maintaining virtual connections over UDP sockets and takes care of sending
 //! raw messages over the established client-server connections with minimal
 //! overhead.
-//! ```
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 #![deny(
