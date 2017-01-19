@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use std::net;
+use std::f32;
 use std::thread;
 use std::time::Duration;
 
@@ -15,6 +16,12 @@ use ::{
     Config, MessageKind, PacketModifier, BinaryRateLimiter, NoopPacketModifier
 };
 
+macro_rules! assert_f32_eq {
+    ($a:expr, $b:expr) => {
+        assert!(($a - $b).abs() < f32::EPSILON);
+    }
+}
+
 #[test]
 fn test_create() {
     let mut conn = create_connection(None);
@@ -22,7 +29,7 @@ fn test_create() {
     assert_eq!(conn.congested(), false);
     assert!(conn.state() == ConnectionState::Connecting);
     assert_eq!(conn.rtt(), 0);
-    assert_eq!(conn.packet_loss(), 0.0);
+    assert_f32_eq!(conn.packet_loss(), 0.0);
     let local_address: net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
     let peer_address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
     assert_eq!(conn.local_addr(), local_address);
@@ -807,7 +814,7 @@ fn test_packet_loss() {
     let events: Vec<ConnectionEvent> = conn.events().collect();
     assert_eq!(events.len(), 0);
 
-    assert_eq!(conn.packet_loss(), 0.0);
+    assert_f32_eq!(conn.packet_loss(), 0.0);
 
     // Wait a bit so the packets will definitely get dropped
     thread::sleep(Duration::from_millis(20));
@@ -825,7 +832,7 @@ fn test_packet_loss() {
     assert_eq!(conn.rtt(), 0);
 
     // But packet loss should spike up
-    assert_eq!(conn.packet_loss(), 100.0);
+    assert_f32_eq!(conn.packet_loss(), 100.0);
 
     let events: Vec<ConnectionEvent> = conn.events().collect();
     assert_eq!(events, vec![
@@ -870,7 +877,7 @@ fn test_packet_loss() {
     ].to_vec());
 
     // Packet loss should now go down
-    assert_eq!(conn.packet_loss(), 50.0);
+    assert_f32_eq!(conn.packet_loss(), 50.0);
 
     let events: Vec<ConnectionEvent> = conn.events().collect();
     assert_eq!(events.len(), 0);

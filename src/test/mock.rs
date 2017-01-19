@@ -95,10 +95,7 @@ impl MockSocket {
 
     pub fn sent(&mut self) -> Vec<MockPacket> {
 
-        let packets: Vec<MockPacket> = self.outgoing.iter().skip(self.sent_index).map(|packet| {
-            packet.clone()
-
-        }).collect();
+        let packets: Vec<MockPacket> = self.outgoing.iter().skip(self.sent_index).cloned().collect();
 
         self.sent_index += packets.len();
         packets
@@ -203,7 +200,7 @@ pub fn create_socket_with_modifier<T: PacketModifier>(config: Option<Config>) ->
 }
 
 pub fn create_connection_with_modifier<T: PacketModifier>(config: Option<Config>) -> Connection<BinaryRateLimiter, T> {
-    let config = config.unwrap_or_else(||Config::default());
+    let config = config.unwrap_or_else(Config::default);
     let local_address: SocketAddr = "127.0.0.1:1234".parse().unwrap();
     let peer_address: SocketAddr = "255.1.1.2:5678".parse().unwrap();
     let limiter = BinaryRateLimiter::new(config);

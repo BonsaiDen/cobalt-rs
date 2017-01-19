@@ -341,20 +341,20 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
 
             let connection = self.connections.get_mut(&id).unwrap();
 
-            // Check if the packet was actually handled
-            if connection.receive_packet(packet) {
-
-                // Map the current remote address of the connection to
-                // the latest address that sent a packet for the
-                // connection id in question. This is done in order to
-                // work in situations were the remote port of a
-                // connection is switched around by NAT.
-                if addr != connection.peer_addr() {
-                    connection.set_peer_addr(addr);
-                    self.addresses.remove(&id);
-                    self.addresses.insert(id, addr);
-                }
-
+            // Check if the packet was actually consumed by the connection.
+            //
+            // If it was, see if the address we received the packet from differs
+            // from the last known address of the connection.
+            //
+            // If it does, we re-map the connections address to the new one,
+            // effectively tracking the clients sending / receiving port.
+            //
+            // This is done so that when the clients NAT decides to switch the
+            // port the connection doesn't end up sending packets into the void.
+            if connection.receive_packet(packet) && addr != connection.peer_addr() {
+                connection.set_peer_addr(addr);
+                self.addresses.remove(&id);
+                self.addresses.insert(id, addr);
             }
 
             // Map any connection events
