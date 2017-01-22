@@ -5,15 +5,20 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use std::net;
+
+// STD Dependencies -----------------------------------------------------------
 use std::f32;
 use std::thread;
 use std::time::Duration;
+use std::net::SocketAddr;
 
-use super::mock::{create_connection, create_socket, create_socket_with_modifier};
+
+// Internal Dependencies ------------------------------------------------------
+use super::MockSocket;
 use ::{
-    Connection, ConnectionID, ConnectionState, ConnectionEvent,
-    Config, MessageKind, PacketModifier, BinaryRateLimiter, NoopPacketModifier
+    Connection, ConnectionID, ConnectionState, ConnectionEvent, Socket,
+    Config, MessageKind, PacketModifier, BinaryRateLimiter, NoopPacketModifier,
+    RateLimiter
 };
 
 macro_rules! assert_f32_eq {
@@ -22,27 +27,40 @@ macro_rules! assert_f32_eq {
     }
 }
 
+
+// Tests ----------------------------------------------------------------------
 #[test]
 fn test_create() {
+
     let mut conn = create_connection(None);
     assert_eq!(conn.open(), true);
     assert_eq!(conn.congested(), false);
     assert!(conn.state() == ConnectionState::Connecting);
     assert_eq!(conn.rtt(), 0);
     assert_f32_eq!(conn.packet_loss(), 0.0);
-    let local_address: net::SocketAddr = "127.0.0.1:1234".parse().unwrap();
-    let peer_address: net::SocketAddr = "255.1.1.2:5678".parse().unwrap();
+
+    let local_address: SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    let peer_address: SocketAddr = "255.1.1.2:5678".parse().unwrap();
+
     assert_eq!(conn.local_addr(), local_address);
     assert_eq!(conn.peer_addr(), peer_address);
     assert_eq!(conn.events().len(), 0);
 
-    // Check debug fmt support
-    let _ = format!("{:?}", conn);
-
 }
 
 #[test]
-fn test_set_tick_rate() {
+fn test_debug_fmt() {
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
+    let address = conn.peer_addr();
+    conn.send_packet(&mut socket, &address);
+    let _ = format!("{:?}", conn);
+}
+
+
+#[test]
+fn test_set_config() {
+    // TODO how to check that the config was actually modified?
     let mut conn = create_connection(None);
     conn.set_config(Config {
         send_rate: 10,
@@ -51,14 +69,65 @@ fn test_set_tick_rate() {
 }
 
 #[test]
+fn test_id_from_packet() {
+
+    let config = Config {
+        protocol_header: [1, 3, 3, 7],
+        .. Config::default()
+    };
+
+    // Extract ID from matching protocol header
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[1, 3, 3, 7, 1, 2, 3, 4]
+
+    ), Some(ConnectionID(16909060)));
+
+    // Ignore ID from non-matching protocol header
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[9, 0, 0, 0, 1, 2, 3, 4]
+
+    ), None);
+
+    // Ignore packet data with len < 8
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[9, 0, 0, 0, 1, 2, 3]
+
+    ), None);
+
+    // Ignore packet data with len < 4
+    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
+        &config,
+        &[9, 0, 0]
+
+    ), None);
+
+}
+
+#[test]
 fn test_close_local() {
 
-    let (mut conn, mut socket) = create_socket(None);
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     // Initiate closure
     conn.close();
     assert_eq!(conn.open(), true);
+    assert!(conn.state() == ConnectionState::Closing);
+
+    // Receival of packets should have no effect on the connection state
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0, // ConnectionID is ignored by receive_packet)
+        0, // local sequence number
+        0, // remote sequence number we confirm
+        0, 0, 0, 0 // bitfield
+
+    ].to_vec());
+
     assert!(conn.state() == ConnectionState::Closing);
 
     // Connection should now be sending closing packets
@@ -106,44 +175,6 @@ fn test_close_local() {
 }
 
 #[test]
-fn test_id_from_packet() {
-
-    let config = Config {
-        protocol_header: [1, 3, 3, 7],
-        .. Config::default()
-    };
-
-    // Extract ID from matching protocol header
-    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
-        &config,
-        &[1, 3, 3, 7, 1, 2, 3, 4]
-
-    ), Some(ConnectionID(16909060)));
-
-    // Ignore ID from non-matching protocol header
-    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
-        &config,
-        &[9, 0, 0, 0, 1, 2, 3, 4]
-
-    ), None);
-
-    // Ignore packet data with len < 8
-    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
-        &config,
-        &[9, 0, 0, 0, 1, 2, 3]
-
-    ), None);
-
-    // Ignore packet data with len < 4
-    assert_eq!(Connection::<BinaryRateLimiter, NoopPacketModifier>::id_from_packet(
-        &config,
-        &[9, 0, 0]
-
-    ), None);
-
-}
-
-#[test]
 fn test_close_remote() {
 
     let mut conn = create_connection(None);
@@ -183,7 +214,8 @@ fn test_close_remote() {
 #[test]
 fn test_connecting_failed() {
 
-    let (mut conn, mut socket) = create_socket(None);
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     thread::sleep(Duration::from_millis(500));
@@ -219,7 +251,8 @@ fn test_reset() {
 #[test]
 fn test_send_sequence_wrap_around() {
 
-    let (mut conn, mut socket) = create_socket(None);
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     for i in 0..256 {
@@ -267,7 +300,8 @@ fn test_send_sequence_wrap_around() {
 #[test]
 fn test_send_and_receive_packet() {
 
-    let (mut conn, mut socket) = create_socket(None);
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     // Test Initial Packet
@@ -386,7 +420,7 @@ fn test_send_and_receive_packet() {
 #[test]
 fn test_receive_packet() {
 
-    let (mut conn, _) = create_socket(None);
+    let mut conn = create_connection(None);
 
     assert_eq!(conn.receive_packet([
         1, 2, 3, 4,
@@ -438,9 +472,50 @@ fn test_receive_packet() {
 }
 
 #[test]
+fn test_receive_packet_ack_overflow() {
+
+    let mut conn = create_connection(None);
+
+    // Receive more packets than the ack queue can hold
+    for i in 0..33 {
+        conn.receive_packet([
+            1, 2, 3, 4,
+            0, 0, 0, 0,
+            i,
+            0,
+            0, 0, 0, 0
+
+        ].to_vec());
+    }
+
+    // Verify ack bit field
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
+    let address = conn.peer_addr();
+
+    conn.send_packet(&mut socket, &address);
+    socket.assert_sent(vec![("255.1.1.2:5678", [
+        1, 2, 3, 4,
+        (conn.id().0 >> 24) as u8,
+        (conn.id().0 >> 16) as u8,
+        (conn.id().0 >> 8) as u8,
+         conn.id().0 as u8,
+
+        0, // local sequence number
+        32, // remote sequence to ack
+
+        // The remote sequence values is already confirmed via the value above
+        // so the highest bit is not set in this case
+        127, 255, 255, 255
+
+    ].to_vec())]);
+
+}
+
+#[test]
 fn test_send_and_receive_messages() {
 
-    let (mut conn, mut socket) = create_socket(None);
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     // Test Message Sending
@@ -572,7 +647,8 @@ fn test_receive_invalid_packets() {
 #[test]
 fn test_rtt() {
 
-    let (mut conn, mut socket) = create_socket(None);
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     assert_eq!(conn.rtt(), 0);
@@ -735,7 +811,8 @@ fn test_rtt() {
 #[test]
 fn test_rtt_tick_correction() {
 
-    let (mut conn, mut socket) = create_socket(None);
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     assert_eq!(conn.rtt(), 0);
@@ -780,7 +857,8 @@ fn test_packet_loss() {
         .. Config::default()
     };
 
-    let (mut conn, mut socket) = create_socket(Some(config));
+    let mut conn = create_connection(Some(config));
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     conn.send(MessageKind::Instant, b"Packet Instant".to_vec());
@@ -929,7 +1007,8 @@ fn test_packet_modification() {
         .. Config::default()
     };
 
-    let (mut conn, mut socket) = create_socket_with_modifier::<TestPacketModifier>(Some(config));
+    let mut conn = create_connection_with_modifier::<TestPacketModifier>(Some(config));
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
 
     // First we send a packet to test compression
@@ -967,5 +1046,20 @@ fn test_packet_modification() {
         ConnectionEvent::Message(b"Bar".to_vec())
     ]);
 
+}
+
+
+// Helpers --------------------------------------------------------------------
+fn create_connection_with_modifier<T: PacketModifier>(config: Option<Config>) -> Connection<BinaryRateLimiter, T> {
+    let config = config.unwrap_or_else(Config::default);
+    let local_address: SocketAddr = "127.0.0.1:1234".parse().unwrap();
+    let peer_address: SocketAddr = "255.1.1.2:5678".parse().unwrap();
+    let limiter = BinaryRateLimiter::new(config);
+    let modifier = T::new(config);
+    Connection::new(config, local_address, peer_address, limiter, modifier)
+}
+
+fn create_connection(config: Option<Config>) -> Connection<BinaryRateLimiter, NoopPacketModifier> {
+    create_connection_with_modifier::<NoopPacketModifier>(config)
 }
 

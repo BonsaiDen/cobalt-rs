@@ -762,6 +762,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
 }
 
+
 // Static Helpers -------------------------------------------------------------
 fn moving_average(a: f32, b: Duration) -> f32 {
     let b = (b.as_secs() as f32) * 1000.0 + (b.subsec_nanos() / 1000000) as f32;

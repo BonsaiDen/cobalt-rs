@@ -15,11 +15,7 @@ use std::sync::mpsc::TryRecvError;
 
 
 // Internal Dependencies ------------------------------------------------------
-use super::super::{
-    BinaryRateLimiter, NoopPacketModifier,
-    Config, Connection,
-    Socket, RateLimiter, PacketModifier
-};
+use super::super::Socket;
 
 
 // Mock Packet Data Abstraction -----------------------------------------------
@@ -180,36 +176,5 @@ impl MockSocket {
 // Helpers --------------------------------------------------------------------
 fn to_socket_addr<T: ToSocketAddrs>(address: T) -> SocketAddr {
     address.to_socket_addrs().unwrap().nth(0).unwrap()
-}
-
-pub fn create_socket(config: Option<Config>) -> (
-    Connection<BinaryRateLimiter, NoopPacketModifier>,
-    MockSocket
-) {
-    let conn = create_connection(config);
-    let socket = MockSocket::new(conn.local_addr(), 0).unwrap();
-    (conn, socket)
-}
-
-pub fn create_socket_with_modifier<T: PacketModifier>(config: Option<Config>) -> (
-    Connection<BinaryRateLimiter, T>, MockSocket
-) {
-    let conn = create_connection_with_modifier::<T>(config);
-    let socket = MockSocket::new(conn.local_addr(), 0).unwrap();
-    (conn, socket)
-}
-
-pub fn create_connection_with_modifier<T: PacketModifier>(config: Option<Config>) -> Connection<BinaryRateLimiter, T> {
-    let config = config.unwrap_or_else(Config::default);
-    let local_address: SocketAddr = "127.0.0.1:1234".parse().unwrap();
-    let peer_address: SocketAddr = "255.1.1.2:5678".parse().unwrap();
-    let limiter = BinaryRateLimiter::new(config);
-    let modifier = T::new(config);
-    Connection::new(config, local_address, peer_address, limiter, modifier)
-}
-
-
-pub fn create_connection(config: Option<Config>) -> Connection<BinaryRateLimiter, NoopPacketModifier> {
-    create_connection_with_modifier::<NoopPacketModifier>(config)
 }
 

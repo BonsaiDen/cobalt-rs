@@ -14,7 +14,7 @@ use std::sync::mpsc::TryRecvError;
 
 
 // Internal Dependencies ------------------------------------------------------
-use super::mock::MockSocket;
+use super::MockSocket;
 use ::{
     BinaryRateLimiter, ConnectionID, Config, MessageKind, NoopPacketModifier,
     Server, ServerEvent
