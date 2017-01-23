@@ -42,7 +42,7 @@ after_success:
   # argument mitigates kcov crashes due to malformed debuginfo, at the
   # cost of some speed <https://github.com/huonw/travis-cargo/issues/12>)
   - travis-cargo coveralls --no-sudo --verify
-  - ./kcov/build/src/kcov --verify --coveralls-id=$TRAVIS_JOB_ID --exclude-pattern=/.cargo,./src/test target/kcov target/debug/cobalt-*
+  - ./kcov/build/src/kcov --verify --coveralls-id=$TRAVIS_JOB_ID --exclude-pattern=/.cargo,./test,/usr/lib target/kcov target/debug/cobalt-*
 
 env:
   global:
