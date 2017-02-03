@@ -93,6 +93,7 @@ pub struct Server<S: Socket, R: RateLimiter, M: PacketModifier> {
     socket: Option<S>,
     connections: HashMap<ConnectionID, Connection<R, M>>,
     addresses: HashMap<ConnectionID, SocketAddr>,
+    dropped: Vec<ConnectionID>,
     ticker: Ticker,
     local_address: Option<SocketAddr>,
     events: VecDeque<ServerEvent>,
@@ -110,6 +111,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
             socket: None,
             connections: HashMap::new(),
             addresses: HashMap::new(),
+            dropped: Vec::new(),
             ticker: Ticker::new(config),
             local_address: None,
             events: VecDeque::new(),
@@ -257,8 +259,11 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
     pub fn send(&mut self, auto_tick: bool) -> Result<(), Error> {
         if self.socket.is_some() {
 
-            // List of dropped connections
-            let mut dropped: Vec<ConnectionID> = Vec::new();
+            // Remove any dropped connections and their address mappings
+            for id in self.dropped.drain(0..) {
+                self.connections.remove(&id).unwrap().reset();
+                self.addresses.remove(&id);
+            }
 
             // Create outgoing packets for all connections
             let mut bytes_sent = 0;
@@ -278,15 +283,9 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
                 if !connection.open() {
                     // Map any remaining connection events
                     map_connection_events(&mut self.events, connection);
-                    dropped.push(*id);
+                    self.dropped.push(*id);
                 }
 
-            }
-
-            // Remove any dropped connections and their address mappings
-            for id in dropped {
-                self.connections.remove(&id).unwrap().reset();
-                self.addresses.remove(&id);
             }
 
             self.stats_collector.set_bytes_sent(bytes_sent);
@@ -316,6 +315,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
             self.events.clear();
             self.connections.clear();
             self.addresses.clear();
+            self.dropped.clear();
             self.ticker.reset();
             self.local_address = None;
             self.socket = None;

@@ -598,7 +598,11 @@ fn test_server_connection_close() {
         ServerEvent::ConnectionClosed(ConnectionID(151521030), true)
     ]);
 
-    // Connection should be removed after next send call
+    // Connection should still exist after next send() call
+    server.send(false).ok();
+    assert!(server.connection(&ConnectionID(151521030)).is_ok());
+
+    // But should be gone after second to next send() call
     server.send(false).ok();
     assert!(server.connection(&ConnectionID(151521030)).is_err());
 
@@ -647,11 +651,17 @@ fn test_server_connection_loss() {
     thread::sleep(Duration::from_millis(200));
 
     let events = server_events(&mut server);
+
+    //  Connection should still be there when fetching the events
     assert_eq!(events, vec![ServerEvent::ConnectionLost(ConnectionID(151521030))]);
+    assert!(server.connection(&ConnectionID(151521030)).is_ok());
+    assert_eq!(server.connections().len(), 1);
+
+
+    // But connection be gone after next send() call
+    server.send(false).ok();
     assert!(server.connection(&ConnectionID(151521030)).is_err());
     assert_eq!(server.connections().len(), 0);
-
-    server.send(false).ok();
 
     // We expect no additional packets to be send once the connection was lost
     server.socket().unwrap().assert_sent_none();

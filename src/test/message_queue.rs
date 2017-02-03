@@ -19,7 +19,7 @@ fn test_debug_fmt() {
     q.send(MessageKind::Instant, b"Hello World".to_vec());
 
     // Check debug fmt support
-    let _ = format!("{:?}", q);
+    assert_ne!(format!("{:?}", q), "");
 
 }
 

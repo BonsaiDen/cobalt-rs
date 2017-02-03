@@ -54,7 +54,7 @@ fn test_debug_fmt() {
     let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
     let address = conn.peer_addr();
     conn.send_packet(&mut socket, &address);
-    let _ = format!("{:?}", conn);
+    assert_ne!(format!("{:?}", conn), "");
 }
 
 
