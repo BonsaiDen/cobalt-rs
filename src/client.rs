@@ -281,22 +281,27 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
         if self.socket.is_some() {
 
             let peer_address = self.peer_address.unwrap();
-            let bytes_sent = self.connection.as_mut().unwrap().send_packet(
+            let result = match self.connection.as_mut().unwrap().send_packet(
                 self.socket.as_mut().unwrap(),
                 &peer_address
-            );
+            ) {
+                Ok(bytes_sent) => {
+                    self.stats_collector.set_bytes_sent(bytes_sent);
+                    self.stats_collector.tick();
+                    self.stats = self.stats_collector.average();
 
-            self.stats_collector.set_bytes_sent(bytes_sent);
-            self.stats_collector.tick();
-            self.stats = self.stats_collector.average();
+                    self.should_receive = true;
 
-            self.should_receive = true;
+                    Ok(())
+                },
+                Err(err) => Err(err)
+            };
 
             if auto_tick {
                 self.ticker.end_tick();
             }
 
-            Ok(())
+            result
 
         } else {
             Err(Error::new(ErrorKind::NotConnected, ""))
@@ -341,4 +346,3 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
     }
 
 }
-

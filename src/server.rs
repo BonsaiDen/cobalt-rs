@@ -274,10 +274,18 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
                 let addr = &self.addresses[id];
 
                 // Then invoke the connection to send a outgoing packet
-                bytes_sent += connection.send_packet(
+                bytes_sent += match connection.send_packet(
                     self.socket.as_mut().unwrap(),
                     addr
-                );
+                ) {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        if auto_tick {
+                            self.ticker.end_tick();
+                        }
+                        return Err(err);
+                    }
+                };
 
                 // Collect all lost / closed connections
                 if !connection.open() {
@@ -415,4 +423,3 @@ fn map_connection_events<R: RateLimiter, M: PacketModifier>(
         })
     }
 }
-

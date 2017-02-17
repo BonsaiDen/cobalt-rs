@@ -14,7 +14,7 @@ use std::vec::Drain;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 use std::collections::{HashMap, VecDeque};
-
+use std::io::Error;
 
 // Internal Dependencies ------------------------------------------------------
 use super::message_queue::MessageQueue;
@@ -486,11 +486,11 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         socket: &mut S,
         addr: &SocketAddr
 
-    ) -> u32 {
+    ) -> Result<u32, Error> {
 
         // Update connection state
         if !self.update_send_state() {
-            return 0;
+            return Ok(0);
         }
 
         let congested = self.rate_limiter.congested();
@@ -507,7 +507,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
         // Check if we should be sending packets, if not skip this packet
         if !self.rate_limiter.should_send() {
-            return 0;
+            return Ok(0);
         }
 
         // Take write buffer out and insert a fresh, empty one in its place
@@ -581,7 +581,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             socket.send_to(
                 &packet[..], *addr
 
-            ).expect(&format!("Failed to send compressed packet to {:?}", addr));
+            )?;
 
             // Number of all bytes sent
             packet.len()
@@ -590,7 +590,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             socket.send_to(
                 &packet[..], *addr
 
-            ).expect(&format!("Failed to send packet to {:?}", addr));
+            )?;
 
             // Number of all bytes sent
             packet.len()
@@ -621,7 +621,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         self.message_queue.dismiss();
 
         // Return number of bytes sent over the socket
-        bytes_sent as u32
+        Ok(bytes_sent as u32)
 
     }
 
@@ -792,4 +792,3 @@ fn seq_was_acked(seq: u32, ack: u32, bitfield: u32) -> bool {
         bit < MAX_ACK_BITS && (bitfield & (1 << bit)) != 0
     }
 }
-
