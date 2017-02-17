@@ -47,7 +47,7 @@ fn main() {
                     );
 
                 },
-                ClientEvent::ConnectionClosed(_) | ClientEvent::ConnectionLost => {
+                ClientEvent::ConnectionClosed(_) | ClientEvent::ConnectionLost(_) => {
                     let conn = client.connection().unwrap();
                     println!(
                         "[Client] ({}, {}ms rtt) disconnected.",

@@ -8,7 +8,7 @@
 
 // STD Dependencies -----------------------------------------------------------
 use std::cmp;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::collections::VecDeque;
 use std::sync::mpsc::TryRecvError;
@@ -42,7 +42,8 @@ pub struct MockSocket {
     local_addr: SocketAddr,
     sent_index: usize,
     pub incoming: VecDeque<MockPacket>,
-    pub outgoing: Vec<MockPacket>
+    pub outgoing: Vec<MockPacket>,
+    fail_sends: bool
 }
 
 impl Socket for MockSocket {
@@ -52,7 +53,8 @@ impl Socket for MockSocket {
             local_addr: to_socket_addr(addr),
             sent_index: 0,
             incoming: VecDeque::new(),
-            outgoing: Vec::new()
+            outgoing: Vec::new(),
+            fail_sends: false
         })
     }
 
@@ -71,8 +73,13 @@ impl Socket for MockSocket {
         addr: SocketAddr
 
     ) -> Result<usize, Error> {
-        self.outgoing.push(MockPacket(addr, data.to_vec()));
-        Ok(data.len())
+        if !self.fail_sends {
+            self.outgoing.push(MockPacket(addr, data.to_vec()));
+            Ok(data.len())
+
+        } else {
+            Err(Error::new(ErrorKind::Other, ""))
+        }
     }
 
     fn local_addr(&self) -> Result<SocketAddr, Error> {
@@ -82,6 +89,10 @@ impl Socket for MockSocket {
 }
 
 impl MockSocket {
+
+    pub fn fail_further_sends(&mut self) {
+        self.fail_sends = true;
+    }
 
     pub fn mock_receive<T: ToSocketAddrs>(&mut self, packets: Vec<(T, Vec<u8>)>) {
         for p in packets {

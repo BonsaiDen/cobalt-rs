@@ -319,7 +319,7 @@ fn test_client_connection_loss_and_reconnect() {
     // Expect one last packet
     assert_eq!(client.socket().unwrap().sent_count(), 1);
 
-    assert_eq!(client_events(&mut client), vec![ClientEvent::ConnectionLost]);
+    assert_eq!(client_events(&mut client), vec![ClientEvent::ConnectionLost(true)]);
 
     client.send(false).ok();
     client.send(false).ok();

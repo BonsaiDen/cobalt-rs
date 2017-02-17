@@ -35,9 +35,17 @@ pub enum ClientEvent {
     ConnectionFailed,
 
     /// Emitted when a existing connection to a server is lost.
-    ConnectionLost,
+    ///
+    /// The contained boolean indicates whether the connection was lost due to
+    /// an isse the remote end, if the value is `false` instead, then a local
+    /// issue caused the connection to be lost.
+    ConnectionLost(bool),
 
     /// Emitted when a connection is closed programmatically.
+    ///
+    /// The contained boolean indicates whether the connection was closed by the
+    /// remote end, if the value is `false` instead, then the connection was
+    /// closed locally.
     ConnectionClosed(bool),
 
     /// Emitted for each message received from a server.
@@ -248,8 +256,8 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Client<S, R, M> {
                     self.events.push_back(match e {
                         ConnectionEvent::Connected => ClientEvent::Connection,
                         ConnectionEvent::FailedToConnect => ClientEvent::ConnectionFailed,
-                        ConnectionEvent::Lost => ClientEvent::ConnectionLost,
-                        ConnectionEvent::Closed(p) => ClientEvent::ConnectionClosed(p),
+                        ConnectionEvent::Lost(by_remote) => ClientEvent::ConnectionLost(by_remote),
+                        ConnectionEvent::Closed(by_remote) => ClientEvent::ConnectionClosed(by_remote),
                         ConnectionEvent::Message(payload) => ClientEvent::Message(payload),
                         ConnectionEvent::CongestionStateChanged(c) => ClientEvent::ConnectionCongestionStateChanged(c),
                         ConnectionEvent::PacketLost(payload) => ClientEvent::PacketLost(payload)

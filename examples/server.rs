@@ -49,7 +49,7 @@ fn main() {
                     );
 
                 },
-                ServerEvent::ConnectionClosed(id, _) | ServerEvent::ConnectionLost(id) => {
+                ServerEvent::ConnectionClosed(id, _) | ServerEvent::ConnectionLost(id, _) => {
                     let conn = server.connection(&id).unwrap();
                     println!(
                         "[Server] Client {} ({}, {}ms rtt) disconnected.",

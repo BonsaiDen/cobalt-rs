@@ -645,6 +645,62 @@ fn test_receive_invalid_packets() {
 }
 
 #[test]
+fn test_send_failure() {
+
+    let mut conn = create_connection(None);
+    let mut socket = MockSocket::new(conn.local_addr(), 0).unwrap();
+    let address = conn.peer_addr();
+
+    conn.send_packet(&mut socket, &address);
+    socket.assert_sent(vec![
+        ("255.1.1.2:5678", [
+            1, 2, 3, 4,
+            (conn.id().0 >> 24) as u8,
+            (conn.id().0 >> 16) as u8,
+            (conn.id().0 >> 8) as u8,
+             conn.id().0 as u8,
+            0,
+            0,
+            0, 0, 0, 0
+        ].to_vec())
+    ]);
+
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0,
+        0,
+        0, // confirm the packet above
+        0, 0,
+        0, 0
+
+    ].to_vec());
+
+    let events: Vec<ConnectionEvent> = conn.events().collect();
+    assert_eq!(events, vec![ConnectionEvent::Connected]);
+
+    socket.fail_further_sends();
+    conn.send_packet(&mut socket, &address);
+
+    thread::sleep(Duration::from_millis(500));
+    conn.receive_packet([
+        1, 2, 3, 4,
+        0, 0, 0, 0,
+        1,
+        0, // confirm the packet above
+        0, 0,
+        0, 0
+
+    ].to_vec());
+
+    thread::sleep(Duration::from_millis(500));
+    conn.send_packet(&mut socket, &address);
+
+    let events: Vec<ConnectionEvent> = conn.events().collect();
+    assert_eq!(events, vec![ConnectionEvent::Lost(false)]);
+
+}
+
+#[test]
 fn test_rtt() {
 
     let mut conn = create_connection(None);

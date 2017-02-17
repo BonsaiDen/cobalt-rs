@@ -653,7 +653,7 @@ fn test_server_connection_loss() {
     let events = server_events(&mut server);
 
     //  Connection should still be there when fetching the events
-    assert_eq!(events, vec![ServerEvent::ConnectionLost(ConnectionID(151521030))]);
+    assert_eq!(events, vec![ServerEvent::ConnectionLost(ConnectionID(151521030), true)]);
     assert!(server.connection(&ConnectionID(151521030)).is_ok());
     assert_eq!(server.connections().len(), 1);
 

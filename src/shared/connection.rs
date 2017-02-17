@@ -91,7 +91,7 @@ pub enum ConnectionEvent {
     FailedToConnect,
 
     /// Emitted when the already established connection is lost.
-    Lost,
+    Lost(bool),
 
     /// Emitted when the already established connection is closed
     /// programmatically.
@@ -158,6 +158,9 @@ pub struct Connection<R: RateLimiter, M: PacketModifier> {
 
     /// Last time a packet was received
     last_receive_time: Instant,
+
+    /// Last time a packet was successully sent over the local network interface
+    last_send_time: Instant,
 
     /// Queue of recently received packets used for ack bitfield construction
     recv_ack_queue: VecDeque<u32>,
@@ -233,6 +236,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             remote_seq_number: 0,
             smoothed_rtt: 0.0,
             last_receive_time: Instant::now(),
+            last_send_time: Instant::now(),
             recv_ack_queue: VecDeque::new(),
             sent_ack_queue: Vec::new(),
             sent_packets: 0,
@@ -569,33 +573,28 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
         }
 
-        // Send packet to socket
-        let bytes_sent = if let Some(mut payload) = self.packet_modifier.outgoing(
+        // Construct outgoing packet
+        let packet = if let Some(mut payload) = self.packet_modifier.outgoing(
             &packet[PACKET_HEADER_SIZE..]
         ) {
 
             // Combine existing header with modified packet payload
             let mut packet = packet[..PACKET_HEADER_SIZE].to_vec();
             packet.append(&mut payload);
-
-            socket.send_to(
-                &packet[..], *addr
-
-            ).expect(&format!("Failed to send compressed packet to {:?}", addr));
-
-            // Number of all bytes sent
-            packet.len()
+            packet
 
         } else {
-            socket.send_to(
-                &packet[..], *addr
-
-            ).expect(&format!("Failed to send packet to {:?}", addr));
-
-            // Number of all bytes sent
-            packet.len()
+            packet
         };
 
+        // Send packet over socket
+        let bytes_sent = match socket.send_to(&packet[..], *addr) {
+            Ok(_) => {
+                self.last_send_time = Instant::now();
+                packet.len()
+            },
+            Err(_) => 0
+        };
 
         // Insert packet into send acknowledgment queue (but avoid dupes)
         if self.send_ack_required(self.local_seq_number) {
@@ -632,6 +631,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
         self.remote_seq_number = 0;
         self.smoothed_rtt = 0.0;
         self.last_receive_time = Instant::now();
+        self.last_send_time = Instant::now();
         self.recv_ack_queue.clear();
         self.sent_ack_queue.clear();
         self.sent_packets = 0;
@@ -701,7 +701,10 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
     fn update_send_state(&mut self) -> bool {
 
         // Calculate time since last received packet
-        let inactive_time = self.last_receive_time.elapsed();
+        let inactive_receive_time = self.last_receive_time.elapsed();
+
+        // Calculate time since last sent packet
+        let inactive_send_time = self.last_send_time.elapsed();
 
         match self.state {
 
@@ -712,7 +715,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             ConnectionState::Connecting => {
 
                 // Quickly detect initial connection failures
-                if inactive_time > self.config.connection_init_threshold {
+                if inactive_receive_time > self.config.connection_init_threshold {
                     self.state = ConnectionState::FailedToConnect;
                     self.events.push(ConnectionEvent::FailedToConnect);
                     false
@@ -725,10 +728,16 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
 
             ConnectionState::Connected => {
 
-                // Detect connection timeouts
-                if inactive_time > self.config.connection_drop_threshold {
+                // Detect remote connection failures (remote went away etc.)
+                if inactive_receive_time > self.config.connection_drop_threshold {
                     self.state = ConnectionState::Lost;
-                    self.events.push(ConnectionEvent::Lost);
+                    self.events.push(ConnectionEvent::Lost(true));
+                    false
+
+                // Detect local connection failures (network interface no longer exists etc.)
+                } else if inactive_send_time > self.config.connection_drop_threshold {
+                    self.state = ConnectionState::Lost;
+                    self.events.push(ConnectionEvent::Lost(false));
                     false
 
                 } else {
@@ -740,7 +749,7 @@ impl<R: RateLimiter, M: PacketModifier> Connection<R, M> {
             ConnectionState::Closing => {
 
                 // Detect connection closure
-                if inactive_time > self.config.connection_closing_threshold {
+                if inactive_receive_time > self.config.connection_closing_threshold {
                     self.state = ConnectionState::Closed;
                     self.events.push(ConnectionEvent::Closed(false));
                     false

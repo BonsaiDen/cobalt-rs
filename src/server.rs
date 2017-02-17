@@ -32,9 +32,17 @@ pub enum ServerEvent {
     Connection(ConnectionID),
 
     /// Event emitted when a existing client connection is lost.
-    ConnectionLost(ConnectionID),
+    ///
+    /// The contained boolean indicates whether the connection was lost due to
+    /// an isse the remote end, if the value is `false` instead, then a local
+    /// issue caused the connection to be lost.
+    ConnectionLost(ConnectionID, bool),
 
     /// Event emitted when a client connection is closed programmatically.
+    ///
+    /// The contained boolean indicates whether the connection was closed by the
+    /// remote end, if the value is `false` instead, then the connection was
+    /// closed locally.
     ConnectionClosed(ConnectionID, bool),
 
     /// Event emitted for each message received from a client connection.
@@ -406,9 +414,9 @@ fn map_connection_events<R: RateLimiter, M: PacketModifier>(
     for event in connection.events() {
         server_events.push_back(match event {
             ConnectionEvent::Connected => ServerEvent::Connection(id),
-            ConnectionEvent::Lost => ServerEvent::ConnectionLost(id),
+            ConnectionEvent::Lost(by_remote) => ServerEvent::ConnectionLost(id, by_remote),
             ConnectionEvent::FailedToConnect => unreachable!(),
-            ConnectionEvent::Closed(p) => ServerEvent::ConnectionClosed(id, p),
+            ConnectionEvent::Closed(by_remote) => ServerEvent::ConnectionClosed(id, by_remote),
             ConnectionEvent::Message(payload) => ServerEvent::Message(id, payload),
             ConnectionEvent::CongestionStateChanged(c) => ServerEvent::ConnectionCongestionStateChanged(id, c),
             ConnectionEvent::PacketLost(payload) => ServerEvent::PacketLost(id, payload)
