@@ -189,7 +189,7 @@ impl<S: Socket, R: RateLimiter, M: PacketModifier> Server<S, R, M> {
         self.ticker.set_config(config);
         self.stats_collector.set_config(config);
 
-        for (_, conn) in &mut self.connections {
+        for conn in self.connections.values_mut() {
             conn.set_config(config);
         }
 

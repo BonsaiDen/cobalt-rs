@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-cobalt = "0.20.0"
+cobalt = "0.22.0"
 ```
 
 and this to your crate root:
