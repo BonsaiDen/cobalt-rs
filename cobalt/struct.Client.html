@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Client` struct in crate `cobalt`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Client">
+
+    <title>cobalt::Client - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>cobalt</a></p><script>window.sidebarCurrent = {name: 'Client', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>cobalt</a>::<wbr><a class='struct' href=''>Client</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../src/cobalt/client.rs.html#101-112' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Client&lt;S:&nbsp;<a class='trait' href='../cobalt/trait.Socket.html' title='cobalt::Socket'>Socket</a>, R:&nbsp;<a class='trait' href='../cobalt/trait.RateLimiter.html' title='cobalt::RateLimiter'>RateLimiter</a>, M:&nbsp;<a class='trait' href='../cobalt/trait.PacketModifier.html' title='cobalt::PacketModifier'>PacketModifier</a>&gt; { /* fields omitted */ }</pre><div class='docblock'><p>Implementation of a low latency socket client.</p>
+
+<h1 id='basic-usage' class='section-header'><a href='#basic-usage'>Basic Usage</a></h1>
+<pre class='rust rust-example-rendered'>
+<span class='kw'>use</span> <span class='ident'>cobalt</span>::{
+    <span class='ident'>BinaryRateLimiter</span>, <span class='ident'>Client</span>, <span class='ident'>Config</span>, <span class='ident'>NoopPacketModifier</span>, <span class='ident'>MessageKind</span>, <span class='ident'>UdpSocket</span>
+};
+
+<span class='comment'>// Create a new client that communicates over a udp socket</span>
+<span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>client</span> <span class='op'>=</span> <span class='ident'>Client</span>::<span class='op'>&lt;</span><span class='ident'>UdpSocket</span>, <span class='ident'>BinaryRateLimiter</span>, <span class='ident'>NoopPacketModifier</span><span class='op'>&gt;</span>::<span class='ident'>new</span>(<span class='ident'>Config</span>::<span class='ident'>default</span>());
+
+<span class='comment'>// Initiate a connection to the server</span>
+<span class='ident'>client</span>.<span class='ident'>connect</span>(<span class='string'>&quot;127.0.0.1:1234&quot;</span>).<span class='ident'>expect</span>(<span class='string'>&quot;Failed to bind to socket&quot;</span>);
+
+<span class='comment'>// loop {</span>
+
+    <span class='comment'>// Fetch connection events</span>
+    <span class='kw'>while</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>event</span>) <span class='op'>=</span> <span class='ident'>client</span>.<span class='ident'>receive</span>() {
+        <span class='comment'>// Handle events (e.g. Connection, Messages, etc.)</span>
+    }
+
+    <span class='comment'>// Schedule a message to the send to the server</span>
+    <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>connection</span>) <span class='op'>=</span> <span class='ident'>client</span>.<span class='ident'>connection</span>() {
+        <span class='ident'>connection</span>.<span class='ident'>send</span>(<span class='ident'>MessageKind</span>::<span class='ident'>Instant</span>, <span class='string'>b&quot;Ping&quot;</span>.<span class='ident'>to_vec</span>());
+    }
+
+    <span class='comment'>// Send all outgoing messages.</span>
+    <span class='comment'>//</span>
+    <span class='comment'>// Also auto delay the current thread to achieve the configured tick rate.</span>
+    <span class='ident'>client</span>.<span class='ident'>send</span>(<span class='bool-val'>true</span>);
+
+<span class='comment'>// }</span>
+
+<span class='comment'>// Disconnect the client, closing its connection and unbinding its socket</span>
+<span class='ident'>client</span>.<span class='ident'>disconnect</span>();</pre>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;S:&nbsp;<a class='trait' href='../cobalt/trait.Socket.html' title='cobalt::Socket'>Socket</a>, R:&nbsp;<a class='trait' href='../cobalt/trait.RateLimiter.html' title='cobalt::RateLimiter'>RateLimiter</a>, M:&nbsp;<a class='trait' href='../cobalt/trait.PacketModifier.html' title='cobalt::PacketModifier'>PacketModifier</a>&gt; <a class='struct' href='../cobalt/struct.Client.html' title='cobalt::Client'>Client</a>&lt;S, R, M&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../src/cobalt/client.rs.html#114-351' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class='method'><span id='new.v' class='invisible'><code>fn <a href='#method.new' class='fnname'>new</a>(config: <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a>) -&gt; <a class='struct' href='../cobalt/struct.Client.html' title='cobalt::Client'>Client</a>&lt;S, R, M&gt;</code></span></h4>
+<div class='docblock'><p>Creates a new client with the given configuration.</p>
+</div><h4 id='method.bytes_sent' class='method'><span id='bytes_sent.v' class='invisible'><code>fn <a href='#method.bytes_sent' class='fnname'>bytes_sent</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u32.html'>u32</a></code></span></h4>
+<div class='docblock'><p>Returns the number of bytes sent over the last second.</p>
+</div><h4 id='method.bytes_received' class='method'><span id='bytes_received.v' class='invisible'><code>fn <a href='#method.bytes_received' class='fnname'>bytes_received</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u32.html'>u32</a></code></span></h4>
+<div class='docblock'><p>Returns the number of bytes received over the last second.</p>
+</div><h4 id='method.peer_addr' class='method'><span id='peer_addr.v' class='invisible'><code>fn <a href='#method.peer_addr' class='fnname'>peer_addr</a>(&amp;self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='enum' href='https://doc.rust-lang.org/nightly/std/net/addr/enum.SocketAddr.html' title='std::net::addr::SocketAddr'>SocketAddr</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns the address of the server the client is currently connected to.</p>
+</div><h4 id='method.local_addr' class='method'><span id='local_addr.v' class='invisible'><code>fn <a href='#method.local_addr' class='fnname'>local_addr</a>(&amp;self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='enum' href='https://doc.rust-lang.org/nightly/std/net/addr/enum.SocketAddr.html' title='std::net::addr::SocketAddr'>SocketAddr</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns the local address that the client is sending from.</p>
+</div><h4 id='method.connection' class='method'><span id='connection.v' class='invisible'><code>fn <a href='#method.connection' class='fnname'>connection</a>(&amp;mut self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;&amp;mut <a class='struct' href='../cobalt/struct.Connection.html' title='cobalt::Connection'>Connection</a>&lt;R, M&gt;, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns a mutable reference to underlying connection to the server.</p>
+</div><h4 id='method.socket' class='method'><span id='socket.v' class='invisible'><code>fn <a href='#method.socket' class='fnname'>socket</a>(&amp;mut self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;&amp;mut S, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Returns a mutable reference to the client&#39;s underlying socket.</p>
+</div><h4 id='method.config' class='method'><span id='config.v' class='invisible'><code>fn <a href='#method.config' class='fnname'>config</a>(&amp;self) -&gt; <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span></h4>
+<div class='docblock'><p>Returns the client&#39;s current configuration.</p>
+</div><h4 id='method.set_config' class='method'><span id='set_config.v' class='invisible'><code>fn <a href='#method.set_config' class='fnname'>set_config</a>(&amp;mut self, config: <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a>)</code></span></h4>
+<div class='docblock'><p>Overrides the client&#39;s current configuration.</p>
+</div><h4 id='method.connect' class='method'><span id='connect.v' class='invisible'><code>fn <a href='#method.connect' class='fnname'>connect</a>&lt;A:&nbsp;<a class='trait' href='https://doc.rust-lang.org/nightly/std/net/addr/trait.ToSocketAddrs.html' title='std::net::addr::ToSocketAddrs'>ToSocketAddrs</a>&gt;(&amp;mut self, addr: A) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Establishes a connection with the server at the specified address.</p>
+</div><h4 id='method.receive' class='method'><span id='receive.v' class='invisible'><code>fn <a href='#method.receive' class='fnname'>receive</a>(&amp;mut self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='enum' href='../cobalt/enum.ClientEvent.html' title='cobalt::ClientEvent'>ClientEvent</a>, <a class='enum' href='https://doc.rust-lang.org/nightly/std/sync/mpsc/enum.TryRecvError.html' title='std::sync::mpsc::TryRecvError'>TryRecvError</a>&gt;</code></span></h4>
+<div class='docblock'><p>Receives the next incoming message from the client&#39;s underlying
+connection.</p>
+</div><h4 id='method.send' class='method'><span id='send.v' class='invisible'><code>fn <a href='#method.send' class='fnname'>send</a>(&amp;mut self, auto_tick: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Sends all queued messages over the client&#39;s underlying connection.</p>
+
+<p>If <code>auto_tick</code> is specified as <code>true</code> this method will block the
+current thread for the amount of time which is required to limit the
+number of calls per second (when called inside a loop) to the client&#39;s
+configured <code>send_rate</code>.</p>
+</div><h4 id='method.reset' class='method'><span id='reset.v' class='invisible'><code>fn <a href='#method.reset' class='fnname'>reset</a>(&amp;mut self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Resets the client, clearing all pending events and dropping any
+connection to the server, returning it into the <code>Connecting</code>
+state.</p>
+
+<p>This can be used to re-try a connection attempt if a previous one has
+failed.</p>
+</div><h4 id='method.disconnect' class='method'><span id='disconnect.v' class='invisible'><code>fn <a href='#method.disconnect' class='fnname'>disconnect</a>(&amp;mut self) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></span></h4>
+<div class='docblock'><p>Drops the client&#39;s connection to the server, freeing the socket and
+clearing any state.</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;S:&nbsp;<a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> + <a class='trait' href='../cobalt/trait.Socket.html' title='cobalt::Socket'>Socket</a>, R:&nbsp;<a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> + <a class='trait' href='../cobalt/trait.RateLimiter.html' title='cobalt::RateLimiter'>RateLimiter</a>, M:&nbsp;<a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> + <a class='trait' href='../cobalt/trait.PacketModifier.html' title='cobalt::PacketModifier'>PacketModifier</a>&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='struct' href='../cobalt/struct.Client.html' title='cobalt::Client'>Client</a>&lt;S, R, M&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../src/cobalt/client.rs.html#100' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.fmt' class='method'><span id='fmt.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></span></h4>
+<div class='docblock'><p>Formats the value using the given formatter.</p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "cobalt";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

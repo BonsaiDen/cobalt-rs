@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `cobalt` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, cobalt">
+
+    <title>cobalt - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'></p><script>window.sidebarCurrent = {name: 'cobalt', ty: 'mod', relpath: '../'};</script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>cobalt</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../src/cobalt/lib.rs.html#9-54' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p><strong>cobalt</strong> is low level a networking library which implements <a href="http://gafferongames.com/networking-for-game-programmers/udp-vs-tcp/">virtual
+connections over UDP</a>
+supporting both unreliable messaging and reliable messages with optional
+in-order delivery.</p>
+
+<p>It is designed for use with real-time, low latency situations, for example
+action oriented multiplayer games.</p>
+
+<p>The library provides the underlying architecture required for handling and
+maintaining virtual connections over UDP sockets and takes care of sending
+raw messages over the established client-server connections with minimal
+overhead.</p>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.BinaryRateLimiter.html'
+                                  title='cobalt::BinaryRateLimiter'>BinaryRateLimiter</a></td>
+                           <td class='docblock-short'>
+                                <p>Implementation of a binary state rate limiter for congestion avoidance.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Client.html'
+                                  title='cobalt::Client'>Client</a></td>
+                           <td class='docblock-short'>
+                                <p>Implementation of a low latency socket client.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Config.html'
+                                  title='cobalt::Config'>Config</a></td>
+                           <td class='docblock-short'>
+                                <p>Structure defining connection and message configuration options.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Connection.html'
+                                  title='cobalt::Connection'>Connection</a></td>
+                           <td class='docblock-short'>
+                                <p>Implementation of a reliable, virtual socket connection.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.ConnectionID.html'
+                                  title='cobalt::ConnectionID'>ConnectionID</a></td>
+                           <td class='docblock-short'>
+                                <p>Representation of a random ID for connection identification purposes.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.NoopPacketModifier.html'
+                                  title='cobalt::NoopPacketModifier'>NoopPacketModifier</a></td>
+                           <td class='docblock-short'>
+                                <p>Implementation of a packet modifier which does nothing.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Server.html'
+                                  title='cobalt::Server'>Server</a></td>
+                           <td class='docblock-short'>
+                                <p>Implementation of a multi-client low latency socket server.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.UdpSocket.html'
+                                  title='cobalt::UdpSocket'>UdpSocket</a></td>
+                           <td class='docblock-short'>
+                                <p>Non-blocking abstraction over a UDP socket.</p>
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.ClientEvent.html'
+                                  title='cobalt::ClientEvent'>ClientEvent</a></td>
+                           <td class='docblock-short'>
+                                <p>Enum of client related network events.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.ConnectionEvent.html'
+                                  title='cobalt::ConnectionEvent'>ConnectionEvent</a></td>
+                           <td class='docblock-short'>
+                                <p>Enum of connection related network events.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.ConnectionState.html'
+                                  title='cobalt::ConnectionState'>ConnectionState</a></td>
+                           <td class='docblock-short'>
+                                <p>Enum indicating the state of a connection.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.MessageKind.html'
+                                  title='cobalt::MessageKind'>MessageKind</a></td>
+                           <td class='docblock-short'>
+                                <p>Enum for specification of a message handling algorithm.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.ServerEvent.html'
+                                  title='cobalt::ServerEvent'>ServerEvent</a></td>
+                           <td class='docblock-short'>
+                                <p>Enum of server network events.</p>
+                           </td>
+                       </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.PacketModifier.html'
+                                  title='cobalt::PacketModifier'>PacketModifier</a></td>
+                           <td class='docblock-short'>
+                                <p>Trait describing optional per-packet payload modification logic.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.RateLimiter.html'
+                                  title='cobalt::RateLimiter'>RateLimiter</a></td>
+                           <td class='docblock-short'>
+                                <p>Trait describing a network congestion avoidance algorithm.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.Socket.html'
+                                  title='cobalt::Socket'>Socket</a></td>
+                           <td class='docblock-short'>
+                                <p>Trait describing a non-blocking low latency socket.</p>
+                           </td>
+                       </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.ConnectionMap.html'
+                                  title='cobalt::ConnectionMap'>ConnectionMap</a></td>
+                           <td class='docblock-short'>
+                                <p>Type alias for connection mappings.</p>
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "cobalt";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

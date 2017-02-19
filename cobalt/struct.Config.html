@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Config` struct in crate `cobalt`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Config">
+
+    <title>cobalt::Config - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>cobalt</a></p><script>window.sidebarCurrent = {name: 'Config', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>cobalt</a>::<wbr><a class='struct' href=''>Config</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a class='srclink' href='../src/cobalt/shared/config.rs.html#16-93' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct Config {
+    pub send_rate: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u64.html'>u64</a>,
+    pub packet_max_size: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>,
+    pub protocol_header: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.array.html'>[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.array.html'>; 4]</a>,
+    pub packet_drop_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a>,
+    pub connection_init_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a>,
+    pub connection_drop_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a>,
+    pub connection_closing_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a>,
+    pub message_quota_instant: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a>,
+    pub message_quota_reliable: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a>,
+    pub message_quota_ordered: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a>,
+    pub tick_overflow_recovery: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>,
+    pub tick_overflow_recovery_rate: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a>,
+}</pre><div class='docblock'><p>Structure defining connection and message configuration options.</p>
+</div><h2 class='fields'>Fields</h2><span id='structfield.send_rate' class='structfield'>
+                           <span id='send_rate.v' class='invisible'>
+                           <code>send_rate: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u64.html'>u64</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Number of packets send per second. Default is <code>30</code>.</p>
+</div><span id='structfield.packet_max_size' class='structfield'>
+                           <span id='packet_max_size.v' class='invisible'>
+                           <code>packet_max_size: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Maximum bytes that can be received / send in one packet. Default
+<code>1400</code>.</p>
+</div><span id='structfield.protocol_header' class='structfield'>
+                           <span id='protocol_header.v' class='invisible'>
+                           <code>protocol_header: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.array.html'>[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.array.html'>; 4]</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>32-Bit Protocol ID used to identify UDP related packets. Default is
+<code>[1, 2, 3, 4]</code>.</p>
+</div><span id='structfield.packet_drop_threshold' class='structfield'>
+                           <span id='packet_drop_threshold.v' class='invisible'>
+                           <code>packet_drop_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Maximum roundtrip-time in milliseconds before a packet is considered
+lost. Default is <code>1000</code>.</p>
+</div><span id='structfield.connection_init_threshold' class='structfield'>
+                           <span id='connection_init_threshold.v' class='invisible'>
+                           <code>connection_init_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Maximum time in milliseconds until the first packet must be received
+before a connection attempt fails. Default is <code>100</code>.</p>
+</div><span id='structfield.connection_drop_threshold' class='structfield'>
+                           <span id='connection_drop_threshold.v' class='invisible'>
+                           <code>connection_drop_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Maximum time in milliseconds between any two packets before the
+connection gets dropped. Default is <code>1000</code>.</p>
+</div><span id='structfield.connection_closing_threshold' class='structfield'>
+                           <span id='connection_closing_threshold.v' class='invisible'>
+                           <code>connection_closing_threshold: <a class='struct' href='https://doc.rust-lang.org/nightly/std/time/duration/struct.Duration.html' title='std::time::duration::Duration'>Duration</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Maximum time in milliseconds to wait for remote confirmation after
+programmatically closing a connection. Default is <code>150</code>.</p>
+</div><span id='structfield.message_quota_instant' class='structfield'>
+                           <span id='message_quota_instant.v' class='invisible'>
+                           <code>message_quota_instant: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>The percent of available packet bytes to use when serializing
+<code>MessageKind::Instant</code> into a packet via a <code>MessageQueue</code>.</p>
+</div><span id='structfield.message_quota_reliable' class='structfield'>
+                           <span id='message_quota_reliable.v' class='invisible'>
+                           <code>message_quota_reliable: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>The percent of available packet bytes to use when serializing
+<code>MessageKind::Reliable</code> into a packet via a <code>MessageQueue</code>.</p>
+</div><span id='structfield.message_quota_ordered' class='structfield'>
+                           <span id='message_quota_ordered.v' class='invisible'>
+                           <code>message_quota_ordered: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>The percent of available packet bytes to use when serializing
+<code>MessageKind::Ordered</code> into a packet via a <code>MessageQueue</code>.</p>
+</div><span id='structfield.tick_overflow_recovery' class='structfield'>
+                           <span id='tick_overflow_recovery.v' class='invisible'>
+                           <code>tick_overflow_recovery: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Whether to keep track of ticks which exceed their maximum running time
+and speed up successive ticks in order to keep the desired target
+<code>send_rate</code> stable.</p>
+
+<p>Each tick has a limit of the number of milliseconds in can take before
+the <code>send_rate</code> drops below the specified ticks per second
+target (<code>1000 / send_rate</code> milliseconds). Ticks which fall below this
+threshold will normally sleep for the remaining amount of time.</p>
+
+<p>Ticks which exceed this threshold will normally cause the <code>send_rate</code>
+to drop below the target; however, with <code>tick_overflow_recovery</code>
+enabled any tick which falls below the threshold will give up some of
+its remaining sleep time in order to allow the <code>send_rate</code> to catch up
+again.</p>
+
+<p>How much of each tick&#39;s sleep time is used for speedup purposes is
+determined by the value of <code>tick_overflow_recovery</code>.</p>
+
+<p>Default is <code>true</code>.</p>
+</div><span id='structfield.tick_overflow_recovery_rate' class='structfield'>
+                           <span id='tick_overflow_recovery_rate.v' class='invisible'>
+                           <code>tick_overflow_recovery_rate: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a></code>
+                           </span></span><span class='stab '></span><div class='docblock'><p>Determines how much of each tick&#39;s sleep time may be used to reduce the
+current tick overflow time in order to smooth out the <code>send_rate</code>.</p>
+
+<p>Values must be in the range of <code>0.0</code> to <code>1.0</code> where <code>0.25</code> would be a
+quarter of the tick&#39;s sleep time.</p>
+
+<p>Example: For a <code>send_rate</code> of <code>30</code> with a maximum sleep time of <code>33.33</code>
+milliseconds, a <code>tick_overflow_recovery_rate</code> value of <code>0.5</code> would
+allow up to <code>16.66</code> milliseconds of sleep to be skipped.</p>
+
+<p>Values smaller than <code>0.0</code> or bigger than <code>1.0</code> will have no effect.</p>
+
+<p>Default is <code>1.0</code>.</p>
+</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Copy.html' title='core::marker::Copy'>Copy</a> for <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../src/cobalt/shared/config.rs.html#15' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'></div><h3 class='impl'><span class='in-band'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a> for <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../src/cobalt/shared/config.rs.html#15' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.clone' class='method'><span id='clone.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone' class='fnname'>clone</a>(&amp;self) -&gt; <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span></h4>
+<div class='docblock'><p>Returns a copy of the value. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#tymethod.clone">Read more</a></p>
+</div><h4 id='method.clone_from' class='method'><span id='clone_from.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from' class='fnname'>clone_from</a>(&amp;mut self, source: &amp;Self)</code><div class='since' title='Stable since Rust version 1.0.0'>1.0.0</div></span></h4>
+<div class='docblock'><p>Performs copy-assignment from <code>source</code>. <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html#method.clone_from">Read more</a></p>
+</div></div><h3 class='impl'><span class='in-band'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html' title='core::fmt::Debug'>Debug</a> for <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../src/cobalt/shared/config.rs.html#15' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.fmt' class='method'><span id='fmt.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html#tymethod.fmt' class='fnname'>fmt</a>(&amp;self, __arg_0: &amp;mut <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Formatter.html' title='core::fmt::Formatter'>Formatter</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/core/fmt/type.Result.html' title='core::fmt::Result'>Result</a></code></span></h4>
+<div class='docblock'><p>Formats the value using the given formatter.</p>
+</div></div><h3 class='impl'><span class='in-band'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html' title='core::cmp::PartialEq'>PartialEq</a> for <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../src/cobalt/shared/config.rs.html#15' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.eq' class='method'><span id='eq.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html#tymethod.eq' class='fnname'>eq</a>(&amp;self, __arg_0: &amp;<a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></span></h4>
+<div class='docblock'><p>This method tests for <code>self</code> and <code>other</code> values to be equal, and is used by <code>==</code>. <a href="https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html#tymethod.eq">Read more</a></p>
+</div><h4 id='method.ne' class='method'><span id='ne.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html#method.ne' class='fnname'>ne</a>(&amp;self, __arg_0: &amp;<a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a>) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></span></h4>
+<div class='docblock'><p>This method tests for <code>!=</code>.</p>
+</div></div><h3 class='impl'><span class='in-band'><code>impl <a class='trait' href='https://doc.rust-lang.org/nightly/core/default/trait.Default.html' title='core::default::Default'>Default</a> for <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span><span class='out-of-band'><div class='ghost'></div><a class='srclink' href='../src/cobalt/shared/config.rs.html#95-114' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.default' class='method'><span id='default.v' class='invisible'><code>fn <a href='https://doc.rust-lang.org/nightly/core/default/trait.Default.html#tymethod.default' class='fnname'>default</a>() -&gt; <a class='struct' href='../cobalt/struct.Config.html' title='cobalt::Config'>Config</a></code></span></h4>
+<div class='docblock'><p>Returns the &quot;default value&quot; for a type. <a href="https://doc.rust-lang.org/nightly/core/default/trait.Default.html#tymethod.default">Read more</a></p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "cobalt";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    <script defer src="../search-index.js"></script>
+</body>
+</html>
