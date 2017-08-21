@@ -37,8 +37,8 @@ pub enum ClientEvent {
     /// Emitted when a existing connection to a server is lost.
     ///
     /// The contained boolean indicates whether the connection was lost due to
-    /// an isse the remote end, if the value is `false` instead, then a local
-    /// issue caused the connection to be lost.
+    /// an issue with the remote end, if the value is `false` instead, then a
+    /// local issue caused the connection to be lost.
     ConnectionLost(bool),
 
     /// Emitted when a connection is closed programmatically.
