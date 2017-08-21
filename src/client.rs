@@ -82,7 +82,7 @@ pub enum ClientEvent {
 ///         // Handle events (e.g. Connection, Messages, etc.)
 ///     }
 ///
-///     // Schedule a message to the send to the server
+///     // Schedule a message to be sent to the server
 ///     if let Ok(connection) = client.connection() {
 ///         connection.send(MessageKind::Instant, b"Ping".to_vec());
 ///     }
