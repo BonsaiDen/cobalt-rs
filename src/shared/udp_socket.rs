@@ -75,6 +75,15 @@ impl Socket for UdpSocket {
 
 }
 
+impl UdpSocket {
+
+    /// Returns the underlying net::UdpSocket
+    pub fn as_raw_udp_socket(&self) -> &net::UdpSocket {
+        &self.socket
+    }
+
+}
+
 impl fmt::Debug for UdpSocket {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "UdpSocket({:?})", self.socket)
