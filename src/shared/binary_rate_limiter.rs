@@ -116,6 +116,8 @@ impl RateLimiter for BinaryRateLimiter {
                     if self.good_time_duration >= 10000 {
                         self.good_time_duration -= 10000;
 
+                        self.delay_until_good_mode /= 2;
+
                         // We also clamp this at a minimum
                         self.delay_until_good_mode = cmp::max(
                             self.delay_until_good_mode,
